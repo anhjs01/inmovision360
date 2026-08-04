@@ -1,0 +1,111 @@
+/* =============================================================
+   INMOVISIÓN 360 SUITE — base.css
+   Contiene: Reset, Variables CSS, Animaciones globales
+   ============================================================= */
+
+/* ── Reset & Box Model ──────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* ── Variables globales ─────────────────────────────────────── */
+:root {
+  /* Colores principales */
+  --pr: #1e3a8a;   /* Azul primario */
+  --pl: #2d52b3;   /* Azul claro */
+  --ac: #0f9d58;   /* Verde acción */
+  --da: #ef4444;   /* Rojo error */
+  --wa: #f59e0b;   /* Amarillo aviso */
+  --sb: #0d1b3e;   /* Sidebar dark */
+  --sw: 228px;     /* Sidebar width */
+
+  /* Fondos y superficies */
+  --bg: #f4f5f7;
+  --su: #fff;
+  --s2: #f9fafb;
+  --bo: #e5e7eb;
+
+  /* Texto */
+  --t1: #111827;
+  --t2: #4b5563;
+  --t3: #9ca3af;
+
+  /* Sombras */
+  --sh:  0 1px 3px rgba(0,0,0,.06), 0 4px 16px rgba(0,0,0,.05);
+  --shh: 0 8px 32px rgba(0,0,0,.12), 0 2px 8px rgba(0,0,0,.07);
+
+  /* Border radius */
+  --r:  12px;
+  --rl: 20px;
+  --rx: 28px;
+
+  /* Tipografía */
+  --f: 'Plus Jakarta Sans', system-ui, sans-serif;
+}
+
+/* ── Base de documento ──────────────────────────────────────── */
+html, body {
+  height: 100%;
+  font-family: var(--f);
+  -webkit-font-smoothing: antialiased;
+  background: var(--bg);
+  color: var(--t1);
+}
+
+body {
+  display: flex;
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  background: none;
+  font-family: var(--f);
+  color: inherit;
+}
+
+input, select, textarea {
+  font-family: var(--f);
+}
+
+/* ── Scrollbar personalizada ────────────────────────────────── */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-thumb { background: var(--bo); border-radius: 99px; }
+
+/* ── Utilidad ───────────────────────────────────────────────── */
+.hidden { display: none !important; }
+
+/* ── Animaciones globales ───────────────────────────────────── */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes cardIn {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-8px); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: .6; }
+}
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translateX(16px); }
+  to   { opacity: 1; transform: translateX(0); }
+}

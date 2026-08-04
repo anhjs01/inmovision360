@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<!--
+  INMOVISIÓN 360 SUITE HABITAT — Ecosistema Inmobiliario Digital
+  Versión: 12.0 (refactorizado)
+
+  ESTRUCTURA:
+    index.html    → markup semántico limpio
+    css/base.css  → reset, variables, animaciones
+    css/landing.css → estilos de la landing pública
+    css/app.css   → auth, app shell, sidebar, vistas, modales
+
+    js/utils.js          → helpers, formateadores
+    js/modules/data.js   → seed de datos
+    js/modules/store.js  → estado global y CRUD
+    js/modules/auth.js   → autenticación
+    js/modules/ui.js     → vistas y renderizado
+    js/modules/modals.js → modales
+    js/main.js           → entrada, landing, puentes globales
+
+  FLUJO: Landing → Auth → App → [logout] → Landing
+
+  DEPENDENCIAS EXTERNAS:
+    • Google Fonts — Plus Jakarta Sans
+    • TODO producción: Wompi Widget JS, Mapbox GL JS, Floorfy SDK
+-->
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="description" content="INMOVISIÓN 360 SUITE Habitat — Arrienda tu hogar en minutos. Tours 360°, pagos Wompi y contratos Ley 820 en Colombia."/>
+  <title>INMOVISIÓN 360 SUITE Habitat — Ecosistema Inmobiliario Digital</title>
+
+  <!-- Tipografía -->
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
+
+  <!-- Estilos -->
+  <link rel="stylesheet" href="css/base.css"/>
+  <link rel="stylesheet" href="css/landing.css"/>
+  <link rel="stylesheet" href="css/app.css"/>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       STUBS GLOBALES — Para evitar "is not a function" en onclicks
+       Se ejecutan antes de que el módulo main.js esté listo.
+  ═══════════════════════════════════════════════════════════════ -->
+  <script>
+    var _fns = ['__openAuth','__openForm','__confirmDel','__openDetail',
+      '__openVisitaForm','__toggleVisita','__openLeadForm','__openPagoForm',
+      '__markPago','__openWompi','__toast','__logout','__saveConfig',
+      '__selectMsg','__showView','__switchTab','__togglePass','__checkStr',
+      '__doLogin','__doRegister','__quickLogin','__scrollTo','__heroSearch',
+      '__toggleTour','__toggleFavBtn','__toggleFavLanding','__openPubDetail',
+      '__slideCard','__goSlide','__navFoto','__setFoto','__wompiPay'];
+
+    _fns.forEach(function(fn) {
+      window[fn] = function() {
+        var args = Array.prototype.slice.call(arguments);
+        var self = fn;
+        var interval = setInterval(function() {
+          if (window[self] && window[self]._loaded) {
+            clearInterval(interval);
+            window[self].apply(window, args);
+          }
+        }, 50);
+        setTimeout(function() { clearInterval(interval); }, 5000);
+      };
+    });
+  </script>
+</head>
+<body>
+
+<!-- ════════════════════════════════════════════════════════════
+     LANDING — Portada pública
+     Visible antes del login. JS la oculta al autenticarse.
+════════════════════════════════════════════════════════════ -->
+<div id="landing">
+
+  <!-- ── Navegación ─────────────────────────────────────────── -->
+  <nav class="nav">
+    <div class="nav-brand" onclick="scrollTo({top:0,behavior:'smooth'})" style="display:flex;align-items:center;gap:8px;">
+      <img src="assets/images/logo.png" alt="Logo INMOVISIÓN 360 SUITE" style="height:65px;width:auto;">
+      <span class="nav-name">INMOVISIÓN<em>360 SUITE</em></span>
+    </div>
+
+    <div class="nav-links">
+      <button class="nl" onclick="window.__scrollTo('cat-pub')">Propiedades</button>
+      <button class="nl" onclick="window.__scrollTo('tours-pub')">Tours 3D</button>
+      <button class="nl" onclick="window.__scrollTo('how-pub')">Cómo funciona</button>
+    </div>
+
+    <div class="nav-right">
+      <button class="btn-ln" onclick="window.__openAuth('l')">Iniciar sesión</button>
+      <button class="btn-nc" onclick="window.__openAuth('r')">Publicar propiedad</button>
+    </div>
+  </nav>
+
+  <!-- ── Hero ──────────────────────────────────────────────── -->
+  <section class="hero">
+    <div class="hero-left">
+      <div class="hero-tag">
+        <span class="hero-dot"></span>
+        Colombia &amp; Latinoamérica
+      </div>
+
+      <h1>
+        Encuentra tu<br/>próximo hogar
+        <span>en minutos</span>
+      </h1>
+
+      <p class="hero-sub">
+        Propiedades verificadas con tours 3D, mapas interactivos y contratos digitales.
+        La PropTech más moderna de Colombia.
+      </p>
+
+      <div class="hero-actions">
+        <button class="hbtn-a" onclick="window.__scrollTo('cat-pub')">🔍 Explorar propiedades</button>
+        <button class="hbtn-b" onclick="window.__openAuth('r')">🏠 Publicar gratis</button>
+      </div>
+
+      <div class="hero-stats">
+        <div class="hstat">
+          <span class="hstat-v" id="stat-n">247</span>
+          <span class="hstat-l">Propiedades</span>
+        </div>
+        <div class="hstat">
+          <span class="hstat-v">89</span>
+          <span class="hstat-l">Tours 3D</span>
+        </div>
+        <div class="hstat">
+          <span class="hstat-v">1.2k</span>
+          <span class="hstat-l">Usuarios</span>
+        </div>
+        <div class="hstat">
+          <span class="hstat-v">6</span>
+          <span class="hstat-l">Ciudades</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Imagen y tarjetas flotantes -->
+    <div class="hero-right">
+      <img class="hero-img-main"
+           src="https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=1200&q=80"
+           alt="Propiedad premium"/>
+      <div class="hero-img-overlay"></div>
+
+      <div class="float-card fc1">
+        <img class="fc-img" src="https://images.unsplash.com/photo-1613977257363-707ba9348227?w=400&q=80" alt=""/>
+        <div class="fc-body">
+          <div class="fc-title">Penthouse Rosales</div>
+          <div class="fc-price">$4.800.000</div>
+          <div class="fc-loc">📍 Bogotá · Rosales</div>
+          <span class="fc-badge fc-tour">🥽 Tour 3D</span>
+        </div>
+      </div>
+
+      <div class="float-card fc2">
+        <img class="fc-img" src="https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=400&q=80" alt=""/>
+        <div class="fc-body">
+          <div class="fc-title">Loft Laureles</div>
+          <div class="fc-price">$1.850.000</div>
+          <div class="fc-loc">📍 Medellín</div>
+          <span class="fc-badge fc-new">✨ Nuevo</span>
+        </div>
+      </div>
+
+      <div class="float-card fc3">
+        <img class="fc-img" src="https://images.unsplash.com/photo-1551882547-ff40c63fe5fa?w=400&q=80" alt=""/>
+        <div class="fc-body">
+          <div class="fc-title">Ático Bocagrande</div>
+          <div class="fc-price">$4.200.000</div>
+          <div class="fc-loc">📍 Cartagena</div>
+          <span class="fc-badge fc-tour">🗺 Mapa 2D</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Buscador ───────────────────────────────────────────── -->
+  <div class="search-section">
+    <div class="search-wrap">
+      <div class="sw-item">
+        <span class="sw-label">¿Dónde buscas?</span>
+        <input class="sw-input" id="hero-q" type="text"
+               placeholder="Ciudad, barrio o tipo…"
+               oninput="window.__heroSearch()"/>
+      </div>
+      <div class="sw-item" style="max-width:160px">
+        <span class="sw-label">Ciudad</span>
+        <select class="sw-select" id="hero-city" onchange="window.__heroSearch()">
+          <option value="">Todas</option>
+          <option value="bogotá">Bogotá</option>
+          <option value="medellín">Medellín</option>
+          <option value="cali">Cali</option>
+          <option value="cartagena">Cartagena</option>
+        </select>
+      </div>
+      <div class="sw-item" style="max-width:160px">
+        <span class="sw-label">Tipo</span>
+        <select class="sw-select" id="hero-tipo" onchange="window.__heroSearch()">
+          <option value="">Cualquiera</option>
+          <option value="apartamento">Apartamento</option>
+          <option value="casa">Casa</option>
+          <option value="villa">Villa</option>
+          <option value="loft">Loft</option>
+          <option value="estudio">Estudio</option>
+        </select>
+      </div>
+      <button class="sw-btn" onclick="window.__heroSearch(); window.__scrollTo('cat-pub')">
+        🔍 Buscar propiedades
+      </button>
+    </div>
+
+    <!-- Pills de tipo -->
+    <div class="filter-pills" id="pub-chips">
+      <button class="fp active" data-pt="all">🏘️ Todos</button>
+      <button class="fp" data-pt="apartamento">🏢 Apartamento</button>
+      <button class="fp" data-pt="casa">🏠 Casa</button>
+      <button class="fp" data-pt="villa">🏡 Villa</button>
+      <button class="fp" data-pt="loft">🪟 Loft</button>
+      <button class="fp" data-pt="estudio">🛋️ Estudio</button>
+      <button class="fp" id="tour-chip"
+              onclick="window.__toggleTour(this)"
+              style="margin-left:auto">🥽 Solo con tour 3D</button>
+    </div>
+  </div>
+
+  <!-- ── Social proof ──────────────────────────────────────── -->
+  <div class="sp-bar">
+    <div class="sp-item"><div class="sp-dot"></div>Identidades verificadas</div>
+    <div class="sp-item"><div class="sp-dot"></div>Pagos Wompi · PSE · Nequi</div>
+    <div class="sp-item"><div class="sp-dot"></div>Contratos Ley 820 Colombia</div>
+    <div class="sp-item"><div class="sp-dot"></div>Tours Floorfy &amp; Matterport</div>
+    <div class="sp-item"><div class="sp-dot"></div>Soporte 7 días</div>
+  </div>
+
+  <!-- ── Catálogo público ───────────────────────────────────── -->
+  <section class="prop-section" id="cat-pub">
+    <div class="sec-hd">
+      <div>
+        <h2>Propiedades disponibles</h2>
+        <p id="pub-count">Cargando propiedades…</p>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center">
+        <select class="srt-sel" id="pub-sort" onchange="window.__renderPub && window.__renderPub()">
+          <option value="default">Destacados primero</option>
+          <option value="price-asc">Precio ↑</option>
+          <option value="price-desc">Precio ↓</option>
+          <option value="area-desc">Mayor área</option>
+        </select>
+        <span class="sec-link" onclick="window.__openAuth('l')">Ver todas →</span>
+      </div>
+    </div>
+    <div class="pub-grid" id="pub-grid"></div>
+  </section>
+
+  <!-- ── Features strip ────────────────────────────────────── -->
+  <div class="feat-strip">
+    <div class="feat-strip-inner">
+      <div class="fs-item">
+        <div class="fs-ico" style="background:#f0fdf4">🥽</div>
+        <div class="fs-label">Tours 3D/360°</div>
+        <div class="fs-sub">Floorfy &amp; Matterport</div>
+      </div>
+      <div class="fs-item">
+        <div class="fs-ico" style="background:#eff3fb">🗺</div>
+        <div class="fs-label">Mapa 2D</div>
+        <div class="fs-sub">Entorno interactivo</div>
+      </div>
+      <div class="fs-item">
+        <div class="fs-ico" style="background:#fefce8">💳</div>
+        <div class="fs-label">Pagos Wompi</div>
+        <div class="fs-sub">PSE · Nequi · Daviplata</div>
+      </div>
+      <div class="fs-item">
+        <div class="fs-ico" style="background:#fef2f2">📋</div>
+        <div class="fs-label">Contratos</div>
+        <div class="fs-sub">Ley 820 Colombia</div>
+      </div>
+      <div class="fs-item">
+        <div class="fs-ico" style="background:#f5f3ff">✅</div>
+        <div class="fs-label">Verificados</div>
+        <div class="fs-sub">Identidad digital</div>
+      </div>
+      <div class="fs-item">
+        <div class="fs-ico" style="background:#fff8ed">📞</div>
+        <div class="fs-label">Soporte</div>
+        <div class="fs-sub">7 días a la semana</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Tours y planes ─────────────────────────────────────── -->
+  <section class="tours-sec" id="tours-pub">
+    <div style="text-align:center;position:relative;z-index:1">
+      <div style="display:inline-flex;padding:6px 18px;border-radius:99px;background:rgba(94,234,212,.1);border:1px solid rgba(94,234,212,.2);font-size:12px;font-weight:600;color:#5eead4;margin-bottom:14px;letter-spacing:.05em;text-transform:uppercase">
+        Servicios Premium con Wompi
+      </div>
+      <h2 style="font-size:30px;font-weight:800;color:#fff;letter-spacing:-.5px;margin-bottom:12px">
+        Presentación visual premium
+      </h2>
+      <p style="font-size:16px;color:rgba(255,255,255,.5);max-width:520px;margin:0 auto;line-height:1.65">
+        El arrendador elige cómo presentar su propiedad. Más calidad visual = más inquilinos = menos tiempo vacío.
+      </p>
+    </div>
+
+    <div class="tours-grid">
+      <div class="tour-card">
+        <span class="tc-ico">🗺</span>
+        <div class="tc-name">Mapa 2D</div>
+        <div class="tc-price">$49.000<span class="tc-price-u"> COP/mes</span></div>
+        <div class="tc-feats">
+          <div class="tc-feat">Vista satélite interactiva</div>
+          <div class="tc-feat">Distancias a metro y TM</div>
+          <div class="tc-feat">Servicios y colegios</div>
+          <div class="tc-feat">Badge en catálogo</div>
+        </div>
+        <button class="tc-btn"
+                style="background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.22)"
+                onclick="window.__openWompi('Mapa 2D','$49.000')">
+          Contratar con Wompi
+        </button>
+      </div>
+
+      <div class="tour-card popular">
+        <div class="tc-popular">Más popular</div>
+        <span class="tc-ico">🥽</span>
+        <div class="tc-name">Tour 360°</div>
+        <div class="tc-price">$89.000<span class="tc-price-u"> COP/mes</span></div>
+        <div class="tc-feats">
+          <div class="tc-feat">Fotos 360° fotográficas</div>
+          <div class="tc-feat">Recorrido inmersivo</div>
+          <div class="tc-feat">Compatible móvil y web</div>
+          <div class="tc-feat">Floorfy o Kuula</div>
+        </div>
+        <button class="tc-btn"
+                style="background:var(--ac);color:#fff;border:none"
+                onclick="window.__openWompi('Tour 360°','$89.000')">
+          Contratar con Wompi
+        </button>
+      </div>
+
+      <div class="tour-card">
+        <span class="tc-ico">🏠</span>
+        <div class="tc-name">Tour 3D Pro</div>
+        <div class="tc-price">$149.000<span class="tc-price-u"> COP/mes</span></div>
+        <div class="tc-feats">
+          <div class="tc-feat">Modelo 3D Matterport</div>
+          <div class="tc-feat">Medidas exactas</div>
+          <div class="tc-feat">Compatible con VR</div>
+          <div class="tc-feat">Máxima conversión</div>
+        </div>
+        <button class="tc-btn"
+                style="background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.22)"
+                onclick="window.__openWompi('Tour 3D Pro','$149.000')">
+          Contratar con Wompi
+        </button>
+      </div>
+
+      <div class="tour-card">
+        <span class="tc-ico">⭐</span>
+        <div class="tc-name">Pack Completo</div>
+        <div class="tc-price">$219.000<span class="tc-price-u"> COP/mes</span></div>
+        <div class="tc-feats">
+          <div class="tc-feat">Mapa 2D + Tour 360°</div>
+          <div class="tc-feat">Modelo 3D Matterport</div>
+          <div class="tc-feat">Prioridad en resultados</div>
+          <div class="tc-feat">Soporte premium</div>
+        </div>
+        <button class="tc-btn"
+                style="background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.22)"
+                onclick="window.__openWompi('Pack Completo','$219.000')">
+          Contratar con Wompi
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Cómo funciona ─────────────────────────────────────── -->
+  <section class="how-sec" id="how-pub">
+    <div class="how-header">
+      <div class="how-pill">Simple y rápido</div>
+      <h2>¿Cómo funciona?</h2>
+      <p>Desde la búsqueda hasta el contrato firmado, todo en la misma plataforma. Sin papeleo, sin complicaciones.</p>
+    </div>
+
+    <div class="how-cols">
+      <!-- Inquilino -->
+      <div class="how-col">
+        <div class="how-col-header">
+          <div class="how-col-icon" style="background:#eff3fb">🔑</div>
+          <div>
+            <div class="how-col-title">Para inquilinos</div>
+            <div class="how-col-sub">Encuentra y arrienda en 4 pasos</div>
+          </div>
+        </div>
+        <div class="how-steps">
+          <div class="how-step">
+            <div class="hs-left"><div class="hs-num" style="background:var(--pr)">1</div></div>
+            <div class="hs-right">
+              <span class="hs-ico">🔍</span>
+              <div class="hs-title">Busca y filtra</div>
+              <div class="hs-desc">Explora el catálogo por ciudad, barrio, precio y estrato. Activa el filtro de Tour 3D para recorrer sin salir de casa.</div>
+            </div>
+          </div>
+          <div class="how-step">
+            <div class="hs-left"><div class="hs-num" style="background:var(--pr)">2</div></div>
+            <div class="hs-right">
+              <span class="hs-ico">📅</span>
+              <div class="hs-title">Agenda una visita</div>
+              <div class="hs-desc">Solicita visita presencial o virtual con un clic. El arrendador confirma en minutos.</div>
+            </div>
+          </div>
+          <div class="how-step">
+            <div class="hs-left"><div class="hs-num" style="background:var(--pr)">3</div></div>
+            <div class="hs-right">
+              <span class="hs-ico">📋</span>
+              <div class="hs-title">Firma el contrato</div>
+              <div class="hs-desc">Contrato digital con validez legal Ley 820 colombiana. Firma en minutos desde cualquier dispositivo.</div>
+            </div>
+          </div>
+          <div class="how-step">
+            <div class="hs-left"><div class="hs-num" style="background:var(--pr)">4</div></div>
+            <div class="hs-right" style="padding-bottom:0">
+              <span class="hs-ico">🏠</span>
+              <div class="hs-title">Paga y disfruta</div>
+              <div class="hs-desc">Pagos mensuales automáticos vía PSE, Nequi o Daviplata. Historial y comprobantes en tu dashboard.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Arrendador -->
+      <div class="how-col">
+        <div class="how-col-header">
+          <div class="how-col-icon" style="background:#f0fdf4">🏠</div>
+          <div>
+            <div class="how-col-title">Para arrendadores</div>
+            <div class="how-col-sub">Publica y gestiona en 4 pasos</div>
+          </div>
+        </div>
+        <div class="how-steps">
+          <div class="how-step">
+            <div class="hs-left"><div class="hs-num" style="background:var(--ac)">1</div></div>
+            <div class="hs-right">
+              <span class="hs-ico">📝</span>
+              <div class="hs-title">Publica tu propiedad</div>
+              <div class="hs-desc">Sube múltiples fotos, video, mapa 2D y tour 360°. Tu publicación queda visible en minutos.</div>
+            </div>
+          </div>
+          <div class="how-step">
+            <div class="hs-left"><div class="hs-num" style="background:var(--ac)">2</div></div>
+            <div class="hs-right">
+              <span class="hs-ico">🥽</span>
+              <div class="hs-title">Activa servicios premium</div>
+              <div class="hs-desc">Contrata mapa 2D, tour 360° o Matterport directamente desde tu panel con Wompi.</div>
+            </div>
+          </div>
+          <div class="how-step">
+            <div class="hs-left"><div class="hs-num" style="background:var(--ac)">3</div></div>
+            <div class="hs-right">
+              <span class="hs-ico">🎯</span>
+              <div class="hs-title">Gestiona tus leads</div>
+              <div class="hs-desc">CRM con historial de interesados, scoring de leads y agenda de visitas todo en un solo lugar.</div>
+            </div>
+          </div>
+          <div class="how-step">
+            <div class="hs-left"><div class="hs-num" style="background:var(--ac)">4</div></div>
+            <div class="hs-right" style="padding-bottom:0">
+              <span class="hs-ico">💳</span>
+              <div class="hs-title">Cobra sin complicaciones</div>
+              <div class="hs-desc">Cobros automáticos, recordatorios de pago y comprobantes en un clic. Sin llamadas, sin perseguir.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── CTA final ──────────────────────────────────────────── -->
+  <section class="cta-sec">
+    <h2>¿Listo para encontrar tu hogar?</h2>
+    <p>Únete a más de 1.200 personas que ya confían en INMOVISIÓN 360 SUITE.</p>
+    <div class="cta-btns">
+      <button style="padding:16px 34px;border-radius:14px;font-size:15px;font-weight:700;color:#fff;background:rgba(255,255,255,.12);border:2px solid rgba(255,255,255,.3);cursor:pointer;transition:.2s;font-family:var(--f)"
+              onclick="window.__openAuth('l')">🔑 Soy inquilino</button>
+      <button style="padding:16px 34px;border-radius:14px;font-size:15px;font-weight:700;color:var(--ac);background:#fff;box-shadow:0 4px 24px rgba(0,0,0,.15);cursor:pointer;transition:.2s;border:none;font-family:var(--f)"
+              onclick="window.__openAuth('r')">🏠 Soy arrendador</button>
+    </div>
+  </section>
+
+</div><!-- /landing -->
+
+
+<!-- ════════════════════════════════════════════════════════════
+     AUTH — Pantalla de autenticación
+     Login y registro. JS la muestra/oculta según el flujo.
+════════════════════════════════════════════════════════════ -->
+<div id="auth" style="display:none">
+
+  <!-- Panel izquierdo decorativo -->
+  <div class="auth-left">
+    <div>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
+        <img src="assets/images/logo.png" alt="Logo INMOVISIÓN 360 SUITE" style="height:120px;width:auto;">
+        <div class="al-brand">INMOVISIÓN 360 SUITE<em>Habitat</em></div>
+      </div>
+      <div class="al-tag">Ecosistema Inmobiliario Digital</div>
+      <div class="al-hl">La forma más <em>inteligente</em> de arrendar en Colombia</div>
+      <p class="al-desc">Tours 360°, mapas 2D interactivos, pagos Wompi y contratos Ley 820 en una sola plataforma.</p>
+      <div class="al-feats">
+        <div class="al-feat"><div class="al-ico">🥽</div>Tours Floorfy &amp; Matterport integrados</div>
+        <div class="al-feat"><div class="al-ico">🗺</div>Mapas 2D con entorno y servicios</div>
+        <div class="al-feat"><div class="al-ico">💳</div>Wompi · PSE · Nequi · Daviplata</div>
+        <div class="al-feat"><div class="al-ico">📋</div>Contratos firma electrónica Ley 820</div>
+      </div>
+    </div>
+    <div>
+      <div class="al-pills">
+        <span class="al-pill">NestJS</span>
+        <span class="al-pill">PostgreSQL</span>
+        <span class="al-pill">Supabase</span>
+        <span class="al-pill">Redis</span>
+        <span class="al-pill">Wompi</span>
+      </div>
+      <div class="al-copy">© 2025 INMOVISIÓN 360 SUITE Habitat · Colombia &amp; Latinoamérica</div>
+    </div>
+  </div>
+
+  <!-- Panel derecho — formularios -->
+  <div class="auth-right">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px">
+      <img src="assets/images/logo.png" alt="Logo" style="height:65px;width:auto;">
+      <span style="font-size:22px;font-weight:800;color:var(--pr);letter-spacing:-.4px">
+        INMOVISIÓN 360 SUITE<em style="font-style:normal;color:var(--ac)">Habitat</em>
+      </span>
+    </div>
+
+    <!-- Tabs -->
+    <div class="auth-tabs" style="width:100%">
+      <button class="atab active" id="tab-l" data-tab="login"    onclick="window.__switchTab('login')">Iniciar sesión</button>
+      <button class="atab"        id="tab-r" data-tab="register" onclick="window.__switchTab('register')">Crear cuenta</button>
+    </div>
+
+    <!-- Formulario: Login -->
+    <div id="form-login" class="aform">
+      <div class="afl">
+        <label>Correo electrónico</label>
+        <input id="l-email" type="email" placeholder="tu@correo.com"
+               onkeydown="if(event.key==='Enter') window.__doLogin()"/>
+        <div class="ae" id="l-email-e"></div>
+      </div>
+      <div class="afl">
+        <label>Contraseña</label>
+        <div class="inp-w">
+          <input id="l-pass" type="password" placeholder="••••••••" class="has-ico"
+                 onkeydown="if(event.key==='Enter') window.__doLogin()"/>
+          <span class="inp-ico" id="l-pass-eye" onclick="window.__togglePass('l-pass', this)">👁</span>
+        </div>
+        <div class="ae" id="l-pass-e"></div>
+      </div>
+      <div style="text-align:right;margin-top:-5px">
+        <span style="font-size:12.5px;color:var(--pr);cursor:pointer;font-weight:600"
+              onclick="window.__toast('Revisa tu correo para restablecer','info')">
+          ¿Olvidaste tu contraseña?
+        </span>
+      </div>
+      <div class="g-err" id="l-gerr" style="display:none"><span>⚠️</span><span>Error</span></div>
+      <button class="btn-auth" id="btn-login" onclick="window.__doLogin()">Ingresar</button>
+      <div class="divider">acceso rápido demo</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%">
+        <button class="btn-demo" onclick="window.__quickLogin('arrendador')">🏠 Demo Arrendador</button>
+        <button class="btn-demo" onclick="window.__quickLogin('inquilino')">🔑 Demo Inquilino</button>
+      </div>
+      <div class="auth-alt">¿No tienes cuenta? <span onclick="window.__switchTab('register')">Regístrate gratis</span></div>
+    </div>
+
+    <!-- Formulario: Registro -->
+    <div id="form-register" class="aform" style="display:none">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="afl">
+          <label>Nombre</label>
+          <input id="r-name" type="text" placeholder="Juan"/>
+          <div class="ae" id="r-name-e"></div>
+        </div>
+        <div class="afl">
+          <label>Apellido</label>
+          <input id="r-apellido" type="text" placeholder="García"/>
+        </div>
+      </div>
+      <div class="afl">
+        <label>Correo</label>
+        <div class="inp-w">
+          <input id="r-email" type="email" placeholder="tu@correo.com" class="has-ico"/>
+          <span class="inp-ico" id="r-email-ico"></span>
+        </div>
+        <div class="ae" id="r-email-e"></div>
+      </div>
+      <div class="afl">
+        <label>Contraseña</label>
+        <div class="inp-w">
+          <input id="r-pass" type="password" placeholder="Mínimo 6 caracteres" class="has-ico"
+                 oninput="window.__checkStr(this.value)"/>
+          <span class="inp-ico" onclick="window.__togglePass('r-pass', this)">👁</span>
+        </div>
+        <div class="str-bar"><div class="str-fill" id="str-fill"></div></div>
+        <div class="str-lbl" id="str-lbl" style="color:var(--t3)">Escribe una contraseña segura</div>
+        <div class="ae" id="r-pass-e"></div>
+      </div>
+      <div class="afl">
+        <label>Tu rol</label>
+        <div class="role-grid">
+          <label class="ro">
+            <input type="radio" name="rol" value="arrendador" checked/>
+            <div class="rb">
+              <div class="rb-ico">🏠</div>
+              <div class="rb-name">Arrendador</div>
+              <div class="rb-desc">Publico propiedades</div>
+            </div>
+          </label>
+          <label class="ro">
+            <input type="radio" name="rol" value="inquilino"/>
+            <div class="rb">
+              <div class="rb-ico">🔑</div>
+              <div class="rb-name">Inquilino</div>
+              <div class="rb-desc">Busco propiedad</div>
+            </div>
+          </label>
+        </div>
+        <div class="ae" id="r-rol-e"></div>
+      </div>
+      <div class="g-err" id="r-gerr" style="display:none"><span>⚠️</span><span>Error</span></div>
+      <button class="btn-auth" id="btn-reg" onclick="window.__doRegister()">Crear cuenta gratis</button>
+      <div class="auth-alt">¿Ya tienes cuenta? <span onclick="window.__switchTab('login')">Inicia sesión</span></div>
+    </div>
+  </div>
+
+</div><!-- /auth -->
+
+
+<!-- ════════════════════════════════════════════════════════════
+     APP — Aplicación autenticada
+     Visible solo después del login exitoso.
+     .sidebar  → nav lateral (buildSidebarNav() la construye por JS)
+     #main-area → showView() inyecta aquí el HTML de cada vista
+════════════════════════════════════════════════════════════ -->
+<div id="app" style="display:none">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sb-brand">
+      <img src="assets/images/logo.png" alt="Logo INMOVISIÓN 360 SUITE" style="height:32px;width:auto;">
+      <span class="sb-wm">INMOVISIÓN 360 SUITE<em>Habitat</em></span>
+    </div>
+    <div class="sb-rtag" id="sb-rtag">—</div>
+    <nav class="sb-nav" id="sb-nav" aria-label="Navegación principal"></nav>
+    <div class="sb-prof" onclick="window.__showView && window.__showView('configuracion')">
+      <div class="sp-av" id="sp-av">—</div>
+      <div style="flex:1;min-width:0">
+        <div class="sp-nm" id="sp-name">—</div>
+        <div class="sp-rl" id="sp-role">—</div>
+      </div>
+      <div class="sp-dot-g"></div>
+    </div>
+  </aside>
+
+  <!-- Área de contenido dinámico -->
+  <main class="main" id="main-area"></main>
+
+</div><!-- /app -->
+
+
+<!-- Toast (notificaciones flotantes) -->
+<div id="toast-wrap" aria-live="polite"></div>
+
+
+<!-- ════════════════════════════════════════════════════════════
+     Módulo principal (ES modules)
+     Se carga al final para no bloquear el renderizado.
+  ════════════════════════════════════════════════════════════ -->
+<script type="module" src="js/main.js" defer></script>
+
+</body>
+</html>
