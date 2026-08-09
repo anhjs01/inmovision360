@@ -1,0 +1,98 @@
+git
+
+como subir una nueva versión del proyecto
+	
+
+(se ejecuta en la consola del pc estar dentro del proyecto )
+
+git init
+
+	
+
+Para decirle a Git cuáles archivos quieres incluir en tu punto de guardado, ejecuta
+El punto . al final significa "agrega todos los archivos y cambios de la carpeta actual
+
+git add .
+
+	
+ 
+guardar nueva versión de proyecto
+
+git commit -m "Primer guardado de mi proyecto"
+
+dentro de las comillas el nombre de la nueva versión
+	
+
+
+Para saber el estado actual:
+
+git status
+
+Te dirá si hay archivos modificados que no se han guardado.
+	
+
+
+Para ver el historial de tus versiones guardadas
+
+git log
+
+
+mostrará la lista de todos tus commits anteriores con la fecha, la hora y el autor
+
+
+
+
+
+	
+
+
+
+
+# 1. Agregas los nuevos cambios o archivos
+git add .
+
+# 2. Guardas la versión con una nota explicativa de lo que hiciste
+git commit -m "Explicación breve de lo que cambiaste"
+
+# 3. Subes esa nueva versión a GitHub
+git push
+
+
+	
+
+
+
+¿Cómo descargan el proyecto en sus computadores?
+Una vez aceptada la invitación, tus compañeros no necesitan empezar desde cero. En la terminal de sus equipos ejecutan:
+
+PowerShell
+git clone https://github.com/anhjs01/inmovision360.git
+Esto descargará una copia exacta de todo el proyecto y la historia de Git en su carpeta local.
+
+Paso 3: Flujo de trabajo diario en equipo (Buenas Prácticas)
+Para trabajar juntos sin pisarse o sobrescribir el código de los demás, todos deben seguir este ciclo:
+
+A) ANTES de empezar a trabajar (Obtener lo último)
+Cada vez que un compañero vaya a escribir código nuevo, lo primero que debe hacer es descargar los cambios que los demás hayan subido:
+
+PowerShell
+git pull
+B) MIENTRAS trabajan y al terminar un avance
+Guardan sus cambios de la forma habitual:
+
+PowerShell
+git add .
+git commit -m "Agregué la barra de navegación"
+git push
+💡 Consejo para evitar conflictos de código (Uso de Ramas / Branches)
+Si dos personas editan el mismo archivo al mismo tiempo en la rama principal (main), pueden ocurrir "conflictos". La mejor forma de evitarlo es que cada integrante trabaje en su propia rama:
+
+Crear y pasarse a una nueva rama:
+
+PowerShell
+git checkout -b rama-de-juan
+Subir los cambios de su rama:
+
+PowerShell
+git push origin rama-de-juan
+En GitHub, pueden revisar lo que hizo esa persona y unirlo a la rama main haciendo clic en "Compare & pull request".
