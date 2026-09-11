@@ -3,14 +3,18 @@ import { JwtService }             from '@nestjs/jwt';
 import { ConfigService }          from '@nestjs/config';
 import * as bcrypt                from 'bcrypt';
 import { v4 as uuidv4 }          from 'uuid';
+import { OAuth2Client }          from 'google-auth-library';
 import { PrismaService }          from '../prisma/prisma.service';
 import { ApiException }           from '../common/filters/http-exception.filter';
 import { ErrorCode }              from '../common/constants/error-codes';
 import { formatUser }             from '../common/utils/formatters';
-import { RegisterDto, LoginDto, RefreshDto, ForgotPasswordDto } from './dto/auth.dto';
+import { RegisterDto, LoginDto, RefreshDto, ForgotPasswordDto,
+         GoogleLoginDto, CompleteProfileDto } from './dto/auth.dto';
 
 @Injectable()
 export class AuthService {
+  private googleClient = new OAuth2Client(this.config.get('GOOGLE_CLIENT_ID'));
+
   constructor(
     private prisma:  PrismaService,
     private jwt:     JwtService,
@@ -45,13 +49,89 @@ export class AuthService {
       where: { email: dto.email.toLowerCase(), deletedAt: null },
     });
 
-    if (!user || !(await bcrypt.compare(dto.password, user.password))) {
+    if (!user || !user.password || !(await bcrypt.compare(dto.password, user.password))) {
       throw new ApiException(ErrorCode.INVALID_CREDENTIALS, 'Email o contraseña incorrectos', undefined, HttpStatus.UNAUTHORIZED);
     }
 
     const tokens = await this.issueTokens(user.id, user.email, user.rol);
     return { user: formatUser(user), ...tokens };
   }
+
+// ── login google ──
+async googleLogin(idToken: string, mode?: string) {
+  let payload;
+  try {
+    const ticket = await this.googleClient.verifyIdToken({
+      idToken,
+      audience: this.config.get('GOOGLE_CLIENT_ID'),
+    });
+    payload = ticket.getPayload();
+  } catch {
+    throw new ApiException(ErrorCode.TOKEN_INVALID, 'Token de Google inválido', undefined, HttpStatus.UNAUTHORIZED);
+  }
+ 
+  if (!payload?.email) {
+    throw new ApiException(ErrorCode.TOKEN_INVALID, 'Google no devolvió un correo válido', undefined, HttpStatus.UNAUTHORIZED);
+  }
+ 
+  const email = payload.email.toLowerCase();
+  let user = await this.prisma.usuario.findFirst({ where: { googleId: payload.sub } });
+ 
+  if (user) {
+    // Ya tenía cuenta vinculada a Google → si vino del formulario de REGISTRO, es un error
+    if (mode === 'register') {
+      throw new ApiException(ErrorCode.EMAIL_ALREADY_EXISTS, 'Ya tienes una cuenta con este correo. Inicia sesión en su lugar.', 'email');
+    }
+  } else {
+    user = await this.prisma.usuario.findUnique({ where: { email } });
+ 
+    if (user) {
+      // Tenía cuenta con contraseña normal, mismo correo → también es un "ya existe" para registro
+      if (mode === 'register') {
+        throw new ApiException(ErrorCode.EMAIL_ALREADY_EXISTS, 'Ya tienes una cuenta con este correo. Inicia sesión en su lugar.', 'email');
+      }
+      // Viene del formulario de LOGIN → vinculamos Google a la cuenta existente
+      user = await this.prisma.usuario.update({
+        where: { id: user.id },
+        data: { googleId: payload.sub },
+      });
+    } else {
+      // Usuario totalmente nuevo vía Google
+      user = await this.prisma.usuario.create({
+        data: {
+          nombre:         payload.given_name  ?? '',
+          apellido:       payload.family_name ?? '',
+          email,
+          password:       null,
+          googleId:       payload.sub,
+          provider:       'google',
+          rol:            'inquilino',
+          plan:           'free',
+          verified:       true,
+          perfilCompleto: false,
+        },
+      });
+    }
+  }
+ 
+  const tokens = await this.issueTokens(user.id, user.email, user.rol);
+  return { user: formatUser(user), ...tokens, needsProfile: !user.perfilCompleto };
+}
+
+  // ── Completar perfil tras login con Google ─────────────────
+  async completeProfile(userId: string, dto: CompleteProfileDto) {
+  const user = await this.prisma.usuario.update({
+    where: { id: userId },
+    data: {
+      nombre:         dto.nombre,
+      apellido:       dto.apellido ?? '',
+      telefono:       dto.telefono,
+      rol:            dto.rol,
+      perfilCompleto: true,
+    },
+  });
+  return formatUser(user);
+}
 
   // ── Refresh token ──────────────────────────────────────────
   async refresh(dto: RefreshDto) {

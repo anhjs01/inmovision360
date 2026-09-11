@@ -1,11 +1,12 @@
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
-import { RegisterDto, LoginDto, RefreshDto, ForgotPasswordDto } from './dto/auth.dto';
+import { RegisterDto, LoginDto, RefreshDto, ForgotPasswordDto, CompleteProfileDto } from './dto/auth.dto';
 export declare class AuthService {
     private prisma;
     private jwt;
     private config;
+    private googleClient;
     constructor(prisma: PrismaService, jwt: JwtService, config: ConfigService);
     register(dto: RegisterDto): Promise<{
         access_token: string;
@@ -17,6 +18,13 @@ export declare class AuthService {
         refresh_token: string;
         user: any;
     }>;
+    googleLogin(idToken: string, mode?: string): Promise<{
+        needsProfile: boolean;
+        access_token: string;
+        refresh_token: string;
+        user: any;
+    }>;
+    completeProfile(userId: string, dto: CompleteProfileDto): Promise<any>;
     refresh(dto: RefreshDto): Promise<{
         access_token: string;
         refresh_token: string;

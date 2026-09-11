@@ -1,5 +1,5 @@
 import { AuthService } from './auth.service';
-import { RegisterDto, LoginDto, RefreshDto, ForgotPasswordDto } from './dto/auth.dto';
+import { RegisterDto, LoginDto, RefreshDto, ForgotPasswordDto, GoogleLoginDto, CompleteProfileDto } from './dto/auth.dto';
 export declare class AuthController {
     private auth;
     constructor(auth: AuthService);
@@ -13,6 +13,13 @@ export declare class AuthController {
         refresh_token: string;
         user: any;
     }>;
+    googleLogin(dto: GoogleLoginDto): Promise<{
+        needsProfile: boolean;
+        access_token: string;
+        refresh_token: string;
+        user: any;
+    }>;
+    completeProfile(user: any, dto: CompleteProfileDto): Promise<any>;
     refresh(dto: RefreshDto): Promise<{
         access_token: string;
         refresh_token: string;

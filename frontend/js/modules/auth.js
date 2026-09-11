@@ -3,7 +3,7 @@
  */
 'use strict';
 
-import { login, register, logout, loadMe, State } from './store.js';
+import { login, register, logout, loadMe, loginGoogle, completeProfile, State } from './store.js';
 import { showToast }   from './ui.js';
 import { getEl }       from '../utils.js';
 import { AuthApi }     from '../api.js';
@@ -23,6 +23,7 @@ export function switchAuthTab(tab) {
   document.querySelectorAll('.atab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
   getEl('form-login').style.display    = tab === 'login'    ? 'flex' : 'none';
   getEl('form-register').style.display = tab === 'register' ? 'flex' : 'none';
+  initGoogleButtons();
 }
 
 export function togglePasswordVisibility(inputId, iconEl) {
@@ -125,5 +126,41 @@ function launchApp(user) {
     getEl('landing').style.display = 'none';
     getEl('app').style.display     = 'flex';
     initApp(user);
+  });
+}
+
+// ── modules/auth.js: reemplaza handleGoogleCredential  ──
+export async function handleGoogleCredential(response) {
+  const mode = getEl('form-register')?.style.display === 'flex' ? 'register' : 'login';
+  try {
+    const result = await loginGoogle(response.credential, mode);
+    if (result.error) { showToast(result.error, 'error'); return; }
+    if (result.needsProfile) {
+      const { openCompleteProfileModal } = await import('./modals.js');
+      openCompleteProfileModal(result.user);
+    } else {
+      launchApp(result.user);
+    }
+  } catch (e) {
+    showToast('Error de conexión con Google', 'error');
+  }
+}
+
+export async function handleCompleteProfile(nombre, apellido, telefono, rol) {
+  if (!nombre || !telefono || !rol) { showToast('Completa nombre, teléfono y rol', 'error'); return; }
+  const user = await completeProfile({ nombre, apellido, telefono, rol });
+  if (!user) { showToast('No se pudo guardar tu perfil', 'error'); return; }
+  launchApp(user);
+}
+
+export function initGoogleButtons() {
+  if (!window.google?.accounts?.id) return;
+  window.google.accounts.id.initialize({
+    client_id: '455077627745-magboajj5j5nbiv09e5ebsuai8ju2g13.apps.googleusercontent.com',
+    callback:  handleGoogleCredential,
+  });
+  ['g_btn_login', 'g_btn_register'].forEach(id => {
+    const el = getEl(id);
+    if (el) window.google.accounts.id.renderButton(el, { theme: 'outline', size: 'large', width: 320, text: 'continue_with' });
   });
 }

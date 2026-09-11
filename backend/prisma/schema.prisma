@@ -19,18 +19,21 @@ datasource db {
 // LeadEstado:  new | contactado | interesado | visita_agendada | lost
 
 model Usuario {
-  id        String   @id @default(cuid())
-  nombre    String
-  apellido  String   @default("")
-  email     String   @unique
-  password  String
-  rol       String   @default("inquilino")  // arrendador | inquilino | admin
-  plan      String   @default("free")       // free | starter | professional | enterprise
-  telefono  String?
-  verified  Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  deletedAt DateTime?
+  id             String   @id @default(cuid())
+  nombre         String
+  apellido       String   @default("")
+  email          String   @unique
+  password       String?                      // ← ahora opcional (usuarios Google no tienen)
+  googleId       String?  @unique              // ← nuevo
+  provider       String   @default("local")    // ← nuevo: "local" | "google"
+  perfilCompleto Boolean  @default(true)       // ← nuevo: false = falta completar rol/nombre
+  rol            String   @default("inquilino")
+  plan           String   @default("free")
+  telefono       String?
+  verified       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  deletedAt      DateTime?
 
   propiedades   Propiedad[]    @relation("OwnerProps")
   visitas       Visitas[]      @relation("InquilinoVisitas")
@@ -45,7 +48,6 @@ model Usuario {
 
   @@map("usuarios")
 }
-
 model RefreshToken {
   id        String   @id @default(cuid())
   token     String   @unique

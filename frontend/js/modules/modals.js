@@ -518,5 +518,54 @@ export async function openPagoForm() {
     } catch(e) { showToast(e.message||'Error','error'); getEl('pgok').disabled=false; getEl('pgok').textContent='Registrar'; }
   };
 }
+// ── modules/modals.js ──
+export function openCompleteProfileModal(user) {
+  const ov = createOverlay();
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:9999;';
+  ov.innerHTML = `
+    <div class="modal-box" style="max-width:420px;width:90%;padding:28px;background:#fff;border-radius:12px;">
+      <h2 style="font-size:20px;font-weight:800;color:var(--t1);margin-bottom:4px">Termina de verificar tu perfil</h2>
+      <p style="font-size:13px;color:var(--t2);margin-bottom:18px">Ya iniciaste sesión con Google. Confirma estos datos para continuar.</p>
+      <div class="afl">
+        <label>Nombre</label>
+        <input id="cp-name" type="text" value="${sanitize(user.nombre ?? '')}"/>
+      </div>
+      <div class="afl">
+        <label>Apellido</label>
+        <input id="cp-apellido" type="text" value="${sanitize(user.apellido ?? '')}"/>
+      </div>
+      <div class="afl">
+        <label>Correo</label>
+        <input type="email" value="${sanitize(user.email ?? '')}" disabled/>
+      </div>
+      <div class="afl">
+        <label>Teléfono</label>
+        <input id="cp-phone" type="tel" placeholder="+57 300 000 0000"/>
+      </div>
+      <div class="afl">
+        <label>Tu rol</label>
+        <div class="role-grid">
+          <label class="ro">
+            <input type="radio" name="cp-rol" value="arrendador"/>
+            <div class="rb">
+              <div class="rb-ico">🏠</div>
+              <div class="rb-name">Arrendador</div>
+              <div class="rb-desc">Publico propiedades</div>
+            </div>
+          </label>
+          <label class="ro">
+            <input type="radio" name="cp-rol" value="inquilino"/>
+            <div class="rb">
+              <div class="rb-ico">🔑</div>
+              <div class="rb-name">Inquilino</div>
+              <div class="rb-desc">Busco propiedad</div>
+            </div>
+          </label>
+        </div>
+      </div>
+      <button class="btn-auth" style="margin-top:8px" onclick="window.__completeProfile()">Continuar</button>
+    </div>`;
+}
+
 
 export { markPagoAsPaid };

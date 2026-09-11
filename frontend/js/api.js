@@ -15,6 +15,7 @@ export function clearTokens()           { localStorage.removeItem('access_token'
 // ── Core fetch ────────────────────────────────────────────────
 export async function apiFetch(method, path, body = null, retry = true) {
   const token = getToken();
+  const isAuthCall = path.startsWith('/auth/login') || path.startsWith('/auth/register') || path.startsWith('/auth/google');
 
   const res = await fetch(`${BASE_URL}${path}`, {
     method,
@@ -24,9 +25,7 @@ export async function apiFetch(method, path, body = null, retry = true) {
     },
     body: body ? JSON.stringify(body) : null,
   });
-
-  // Token expirado → intentar refresh automático una vez
-  if (res.status === 401 && retry) {
+  if (res.status === 401 && retry && !isAuthCall) {
     const refreshed = await doRefresh();
     if (refreshed) return apiFetch(method, path, body, false);
     clearTokens();
@@ -37,7 +36,6 @@ export async function apiFetch(method, path, body = null, retry = true) {
   const json = await res.json().catch(() => ({ ok: false, error: { message: 'Error de red' } }));
   return json;
 }
-
 async function doRefresh() {
   const rt = localStorage.getItem('refresh_token');
   if (!rt) return false;
@@ -64,12 +62,14 @@ export async function apiUpload(path, formData) {
 // AUTH
 // ══════════════════════════════════════════════════════════════
 export const AuthApi = {
-  register: (dto)  => apiFetch('POST', '/auth/register', dto),
-  login:    (dto)  => apiFetch('POST', '/auth/login',    dto),
-  refresh:  (rt)   => apiFetch('POST', '/auth/refresh',  { refresh_token: rt }),
-  logout:   (rt)   => apiFetch('POST', '/auth/logout',   { refresh_token: rt }),
-  me:       ()     => apiFetch('GET',  '/auth/me'),
-  forgot:   (email)=> apiFetch('POST', '/auth/forgot-password', { email }),
+  register:        (dto)     => apiFetch('POST',  '/auth/register', dto),
+  login:            (dto)     => apiFetch('POST',  '/auth/login',    dto),
+ google: (idToken, mode) => apiFetch('POST', '/auth/google', { idToken, mode }),
+  completeProfile:  (dto)     => apiFetch('PATCH', '/auth/complete-profile', dto),
+  refresh:          (rt)      => apiFetch('POST',  '/auth/refresh',  { refresh_token: rt }),
+  logout:           (rt)      => apiFetch('POST',  '/auth/logout',   { refresh_token: rt }),
+  me:               ()        => apiFetch('GET',   '/auth/me'),
+  forgot:           (email)   => apiFetch('POST',  '/auth/forgot-password', { email }),
 };
 
 // ══════════════════════════════════════════════════════════════

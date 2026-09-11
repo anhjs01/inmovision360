@@ -15,6 +15,7 @@ const jwt_1 = require("@nestjs/jwt");
 const config_1 = require("@nestjs/config");
 const bcrypt = require("bcrypt");
 const uuid_1 = require("uuid");
+const google_auth_library_1 = require("google-auth-library");
 const prisma_service_1 = require("../prisma/prisma.service");
 const http_exception_filter_1 = require("../common/filters/http-exception.filter");
 const error_codes_1 = require("../common/constants/error-codes");
@@ -24,6 +25,7 @@ let AuthService = class AuthService {
         this.prisma = prisma;
         this.jwt = jwt;
         this.config = config;
+        this.googleClient = new google_auth_library_1.OAuth2Client(this.config.get('GOOGLE_CLIENT_ID'));
     }
     async register(dto) {
         const exists = await this.prisma.usuario.findUnique({ where: { email: dto.email.toLowerCase() } });
@@ -48,11 +50,77 @@ let AuthService = class AuthService {
         const user = await this.prisma.usuario.findFirst({
             where: { email: dto.email.toLowerCase(), deletedAt: null },
         });
-        if (!user || !(await bcrypt.compare(dto.password, user.password))) {
+        if (!user || !user.password || !(await bcrypt.compare(dto.password, user.password))) {
             throw new http_exception_filter_1.ApiException(error_codes_1.ErrorCode.INVALID_CREDENTIALS, 'Email o contraseña incorrectos', undefined, common_1.HttpStatus.UNAUTHORIZED);
         }
         const tokens = await this.issueTokens(user.id, user.email, user.rol);
         return { user: (0, formatters_1.formatUser)(user), ...tokens };
+    }
+    async googleLogin(idToken, mode) {
+        let payload;
+        try {
+            const ticket = await this.googleClient.verifyIdToken({
+                idToken,
+                audience: this.config.get('GOOGLE_CLIENT_ID'),
+            });
+            payload = ticket.getPayload();
+        }
+        catch {
+            throw new http_exception_filter_1.ApiException(error_codes_1.ErrorCode.TOKEN_INVALID, 'Token de Google inválido', undefined, common_1.HttpStatus.UNAUTHORIZED);
+        }
+        if (!payload?.email) {
+            throw new http_exception_filter_1.ApiException(error_codes_1.ErrorCode.TOKEN_INVALID, 'Google no devolvió un correo válido', undefined, common_1.HttpStatus.UNAUTHORIZED);
+        }
+        const email = payload.email.toLowerCase();
+        let user = await this.prisma.usuario.findFirst({ where: { googleId: payload.sub } });
+        if (user) {
+            if (mode === 'register') {
+                throw new http_exception_filter_1.ApiException(error_codes_1.ErrorCode.EMAIL_ALREADY_EXISTS, 'Ya tienes una cuenta con este correo. Inicia sesión en su lugar.', 'email');
+            }
+        }
+        else {
+            user = await this.prisma.usuario.findUnique({ where: { email } });
+            if (user) {
+                if (mode === 'register') {
+                    throw new http_exception_filter_1.ApiException(error_codes_1.ErrorCode.EMAIL_ALREADY_EXISTS, 'Ya tienes una cuenta con este correo. Inicia sesión en su lugar.', 'email');
+                }
+                user = await this.prisma.usuario.update({
+                    where: { id: user.id },
+                    data: { googleId: payload.sub },
+                });
+            }
+            else {
+                user = await this.prisma.usuario.create({
+                    data: {
+                        nombre: payload.given_name ?? '',
+                        apellido: payload.family_name ?? '',
+                        email,
+                        password: null,
+                        googleId: payload.sub,
+                        provider: 'google',
+                        rol: 'inquilino',
+                        plan: 'free',
+                        verified: true,
+                        perfilCompleto: false,
+                    },
+                });
+            }
+        }
+        const tokens = await this.issueTokens(user.id, user.email, user.rol);
+        return { user: (0, formatters_1.formatUser)(user), ...tokens, needsProfile: !user.perfilCompleto };
+    }
+    async completeProfile(userId, dto) {
+        const user = await this.prisma.usuario.update({
+            where: { id: userId },
+            data: {
+                nombre: dto.nombre,
+                apellido: dto.apellido ?? '',
+                telefono: dto.telefono,
+                rol: dto.rol,
+                perfilCompleto: true,
+            },
+        });
+        return (0, formatters_1.formatUser)(user);
     }
     async refresh(dto) {
         const stored = await this.prisma.refreshToken.findUnique({

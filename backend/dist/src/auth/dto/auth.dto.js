@@ -9,7 +9,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ResetPasswordDto = exports.ForgotPasswordDto = exports.RefreshDto = exports.LoginDto = exports.RegisterDto = void 0;
+exports.CompleteProfileDto = exports.GoogleLoginDto = exports.ResetPasswordDto = exports.ForgotPasswordDto = exports.RefreshDto = exports.LoginDto = exports.RegisterDto = void 0;
 const class_validator_1 = require("class-validator");
 class RegisterDto {
 }
@@ -73,4 +73,36 @@ __decorate([
     (0, class_validator_1.MinLength)(6),
     __metadata("design:type", String)
 ], ResetPasswordDto.prototype, "password", void 0);
+class GoogleLoginDto {
+}
+exports.GoogleLoginDto = GoogleLoginDto;
+__decorate([
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], GoogleLoginDto.prototype, "idToken", void 0);
+__decorate([
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", String)
+], GoogleLoginDto.prototype, "mode", void 0);
+class CompleteProfileDto {
+}
+exports.CompleteProfileDto = CompleteProfileDto;
+__decorate([
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CompleteProfileDto.prototype, "nombre", void 0);
+__decorate([
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", String)
+], CompleteProfileDto.prototype, "apellido", void 0);
+__decorate([
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CompleteProfileDto.prototype, "telefono", void 0);
+__decorate([
+    (0, class_validator_1.IsIn)(['arrendador', 'inquilino']),
+    __metadata("design:type", String)
+], CompleteProfileDto.prototype, "rol", void 0);
 //# sourceMappingURL=auth.dto.js.map

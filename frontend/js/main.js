@@ -5,7 +5,8 @@
 
 import { openAuth, closeAuth, switchAuthTab, togglePasswordVisibility,
          renderPasswordStrength, handleLogin, handleRegister,
-         loginDemo, handleLogout } from './modules/auth.js';
+         loginDemo, handleLogout, handleCompleteProfile,
+         initGoogleButtons } from './modules/auth.js';
 import { showToast, showView, updateBadges, saveConfig,
          selectMessage }           from './modules/ui.js';
 import { openSoftGate, openDetail, openWompi, openPropertyForm,
@@ -38,6 +39,13 @@ window.__checkStr        = renderPasswordStrength;
 window.__doLogin         = handleLogin;
 window.__doRegister      = handleRegister;
 window.__quickLogin      = loginDemo;
+window.__completeProfile = () => {
+  const nombre   = getEl('cp-name')?.value.trim();
+  const apellido = getEl('cp-apellido')?.value.trim();
+  const telefono = getEl('cp-phone')?.value.trim();
+  const rol      = document.querySelector('input[name="cp-rol"]:checked')?.value;
+  handleCompleteProfile(nombre, apellido, telefono, rol);
+};
 window.__scrollTo        = (id) => document.getElementById(id)?.scrollIntoView({ behavior:'smooth' });
 
 window.__toggleFavBtn = async (propId, btn) => {
@@ -185,13 +193,20 @@ document.addEventListener('change', e => {
   if (e.target.id === 'pub-sort') { pubSort = e.target.value; renderPublicCatalog(); }
 });
 
-// ── Inicialización ────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
   // Restaurar sesión si hay token guardado
   const token = localStorage.getItem('access_token');
   if (token) {
     const user = await loadMe();
     if (user) {
+      if (user.perfilCompleto === false) {
+        // Sesión de Google válida, pero el perfil quedó incompleto
+        getEl('landing').style.display = 'none';
+        getEl('auth').style.display    = 'none';
+        const { openCompleteProfileModal } = await import('./modules/modals.js');
+        openCompleteProfileModal(user);
+        return;
+      }
       await loadFavs();
       getEl('landing').style.display = 'none';
       getEl('auth').style.display    = 'none';
@@ -204,7 +219,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Landing normal
   renderPublicCatalog();
-
+  initGoogleButtons();
   // Contador animado hero
   const counterEl = getEl('stat-n');
   if (counterEl) {

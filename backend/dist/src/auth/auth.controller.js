@@ -24,6 +24,10 @@ let AuthController = class AuthController {
     }
     register(dto) { return this.auth.register(dto); }
     login(dto) { return this.auth.login(dto); }
+    googleLogin(dto) { return this.auth.googleLogin(dto.idToken, dto.mode); }
+    completeProfile(user, dto) {
+        return this.auth.completeProfile(user.id, dto);
+    }
     refresh(dto) { return this.auth.refresh(dto); }
     logout(user, req) {
         const token = req.body?.refresh_token;
@@ -49,6 +53,22 @@ __decorate([
     __metadata("design:paramtypes", [auth_dto_1.LoginDto]),
     __metadata("design:returntype", void 0)
 ], AuthController.prototype, "login", null);
+__decorate([
+    (0, roles_decorator_1.Public)(),
+    (0, common_1.Post)('google'),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [auth_dto_1.GoogleLoginDto]),
+    __metadata("design:returntype", void 0)
+], AuthController.prototype, "googleLogin", null);
+__decorate([
+    (0, common_1.Patch)('complete-profile'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, auth_dto_1.CompleteProfileDto]),
+    __metadata("design:returntype", void 0)
+], AuthController.prototype, "completeProfile", null);
 __decorate([
     (0, roles_decorator_1.Public)(),
     (0, common_1.Post)('refresh'),

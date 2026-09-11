@@ -25,3 +25,15 @@ export class ResetPasswordDto {
   @IsString() token:    string;
   @IsString() @MinLength(6) password: string;
 }
+export class GoogleLoginDto {
+  @IsString() idToken: string;
+  @IsString() @IsOptional() mode?: string; // 'login' | 'register'
+}
+ 
+
+export class CompleteProfileDto {
+  @IsString() nombre: string;
+  @IsString() @IsOptional() apellido?: string;
+  @IsString() telefono: string;
+  @IsIn(['arrendador','inquilino']) rol: string;
+}

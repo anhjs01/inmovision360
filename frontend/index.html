@@ -566,6 +566,7 @@
       </div>
       <div class="g-err" id="l-gerr" style="display:none"><span>⚠️</span><span>Error</span></div>
       <button class="btn-auth" id="btn-login" onclick="window.__doLogin()">Ingresar</button>
+      <div class="divider">o continúa con</div>  <div id="g_btn_login" style="display:flex;justify-content:center;margin-bottom:4px"></div>
       <div class="divider">acceso rápido demo</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%">
         <button class="btn-demo" onclick="window.__quickLogin('arrendador')">🏠 Demo Arrendador</button>
@@ -610,7 +611,7 @@
         <label>Tu rol</label>
         <div class="role-grid">
           <label class="ro">
-            <input type="radio" name="rol" value="arrendador" checked/>
+            <input type="radio" name="rol" value="arrendador"/>
             <div class="rb">
               <div class="rb-ico">🏠</div>
               <div class="rb-name">Arrendador</div>
@@ -629,6 +630,7 @@
         <div class="ae" id="r-rol-e"></div>
       </div>
       <div class="g-err" id="r-gerr" style="display:none"><span>⚠️</span><span>Error</span></div>
+      <div class="divider">o regístrate con</div> <div id="g_btn_register" style="display:flex;justify-content:center;margin-bottom:4px"></div>
       <button class="btn-auth" id="btn-reg" onclick="window.__doRegister()">Crear cuenta gratis</button>
       <div class="auth-alt">¿Ya tienes cuenta? <span onclick="window.__switchTab('login')">Inicia sesión</span></div>
     </div>
@@ -677,6 +679,7 @@
      Módulo principal (ES modules)
      Se carga al final para no bloquear el renderizado.
   ════════════════════════════════════════════════════════════ -->
+   <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script type="module" src="js/main.js" defer></script>
 
 </body>

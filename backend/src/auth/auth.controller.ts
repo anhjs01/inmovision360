@@ -1,9 +1,10 @@
-import { Controller, Post, Get, Body, Req, UseGuards } from '@nestjs/common';
+import { Controller, Post, Get, Patch, Body, Req, UseGuards } from '@nestjs/common';
 import { AuthService }    from './auth.service';
 import { JwtAuthGuard }   from './guards/jwt.guard';
 import { CurrentUser }    from '../common/decorators/current-user.decorator';
 import { Public }         from '../common/decorators/roles.decorator';
-import { RegisterDto, LoginDto, RefreshDto, ForgotPasswordDto } from './dto/auth.dto';
+import { RegisterDto, LoginDto, RefreshDto, ForgotPasswordDto,
+         GoogleLoginDto, CompleteProfileDto } from './dto/auth.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -14,6 +15,14 @@ export class AuthController {
 
   @Public() @Post('login')
   login(@Body() dto: LoginDto) { return this.auth.login(dto); }
+
+  @Public() @Post('google')
+googleLogin(@Body() dto: GoogleLoginDto) { return this.auth.googleLogin(dto.idToken, dto.mode); }
+
+  @Patch('complete-profile')
+  completeProfile(@CurrentUser() user: any, @Body() dto: CompleteProfileDto) {
+    return this.auth.completeProfile(user.id, dto);
+  }
 
   @Public() @Post('refresh')
   refresh(@Body() dto: RefreshDto) { return this.auth.refresh(dto); }

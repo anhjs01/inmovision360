@@ -19,3 +19,13 @@ export declare class ResetPasswordDto {
     token: string;
     password: string;
 }
+export declare class GoogleLoginDto {
+    idToken: string;
+    mode?: string;
+}
+export declare class CompleteProfileDto {
+    nombre: string;
+    apellido?: string;
+    telefono: string;
+    rol: string;
+}
