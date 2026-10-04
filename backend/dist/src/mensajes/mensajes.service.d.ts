@@ -2,11 +2,21 @@ import { PrismaService } from '../prisma/prisma.service';
 export declare class MensajesService {
     private prisma;
     constructor(prisma: PrismaService);
-    findAll(userId: string): Promise<({
+    findAll(userId: string): Promise<any[]>;
+    getConversacion(userId: string, currentUserId: string): Promise<({
         propiedad: {
+            id: string;
             titulo: string;
+            precio: number;
+            fotos: string;
         };
         de: {
+            id: string;
+            nombre: string;
+            apellido: string;
+        };
+        para: {
+            id: string;
             nombre: string;
             apellido: string;
         };
@@ -21,9 +31,18 @@ export declare class MensajesService {
     })[]>;
     send(deId: string, dto: any): Promise<{
         propiedad: {
+            id: string;
             titulo: string;
+            precio: number;
+            fotos: string;
         };
         de: {
+            id: string;
+            nombre: string;
+            apellido: string;
+        };
+        para: {
+            id: string;
             nombre: string;
             apellido: string;
         };
@@ -45,11 +64,15 @@ export declare class MensajesService {
         deId: string;
         paraId: string;
     }>;
+    markConversationRead(userId: string, currentUserId: string): Promise<{
+        count: number;
+    }>;
     unreadCount(userId: string): Promise<{
         count: number;
     }>;
     getHilo(propId: string, userId: string): Promise<({
         de: {
+            id: string;
             nombre: string;
             apellido: string;
         };

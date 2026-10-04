@@ -20,11 +20,27 @@ let MensajesController = class MensajesController {
     constructor(svc) {
         this.svc = svc;
     }
-    findAll(u) { return this.svc.findAll(u.id); }
-    unread(u) { return this.svc.unreadCount(u.id); }
-    hilo(p, u) { return this.svc.getHilo(p, u.id); }
-    send(u, b) { return this.svc.send(u.id, b); }
-    markRead(id) { return this.svc.markRead(id); }
+    findAll(u) {
+        return this.svc.findAll(u.id);
+    }
+    unread(u) {
+        return this.svc.unreadCount(u.id);
+    }
+    conversacion(userId, u) {
+        return this.svc.getConversacion(userId, u.id);
+    }
+    marcarConversacionLeida(userId, u) {
+        return this.svc.markConversationRead(userId, u.id);
+    }
+    hilo(p, u) {
+        return this.svc.getHilo(p, u.id);
+    }
+    send(u, b) {
+        return this.svc.send(u.id, b);
+    }
+    markRead(id) {
+        return this.svc.markRead(id);
+    }
 };
 exports.MensajesController = MensajesController;
 __decorate([
@@ -41,6 +57,22 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", void 0)
 ], MensajesController.prototype, "unread", null);
+__decorate([
+    (0, common_1.Get)('conversacion/:userId'),
+    __param(0, (0, common_1.Param)('userId')),
+    __param(1, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", void 0)
+], MensajesController.prototype, "conversacion", null);
+__decorate([
+    (0, common_1.Patch)('conversacion/:userId/leidos'),
+    __param(0, (0, common_1.Param)('userId')),
+    __param(1, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", void 0)
+], MensajesController.prototype, "marcarConversacionLeida", null);
 __decorate([
     (0, common_1.Get)('hilo/:propId'),
     __param(0, (0, common_1.Param)('propId')),

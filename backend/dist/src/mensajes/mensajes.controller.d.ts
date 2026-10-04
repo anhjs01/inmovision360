@@ -2,11 +2,24 @@ import { MensajesService } from './mensajes.service';
 export declare class MensajesController {
     private svc;
     constructor(svc: MensajesService);
-    findAll(u: any): Promise<({
+    findAll(u: any): Promise<any[]>;
+    unread(u: any): Promise<{
+        count: number;
+    }>;
+    conversacion(userId: string, u: any): Promise<({
         propiedad: {
+            id: string;
             titulo: string;
+            precio: number;
+            fotos: string;
         };
         de: {
+            id: string;
+            nombre: string;
+            apellido: string;
+        };
+        para: {
+            id: string;
             nombre: string;
             apellido: string;
         };
@@ -19,11 +32,12 @@ export declare class MensajesController {
         deId: string;
         paraId: string;
     })[]>;
-    unread(u: any): Promise<{
+    marcarConversacionLeida(userId: string, u: any): Promise<{
         count: number;
     }>;
     hilo(p: string, u: any): Promise<({
         de: {
+            id: string;
             nombre: string;
             apellido: string;
         };
@@ -38,9 +52,18 @@ export declare class MensajesController {
     })[]>;
     send(u: any, b: any): Promise<{
         propiedad: {
+            id: string;
             titulo: string;
+            precio: number;
+            fotos: string;
         };
         de: {
+            id: string;
+            nombre: string;
+            apellido: string;
+        };
+        para: {
+            id: string;
             nombre: string;
             apellido: string;
         };
