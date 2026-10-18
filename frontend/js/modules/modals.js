@@ -142,7 +142,7 @@ export async function openDetail(propId) {
           <button id="det-fav-btn" style="padding:10px;border-radius:10px;border:1.5px solid #fed7aa;background:#fff8ed;color:var(--wa);font-size:13px;font-weight:600;cursor:pointer;font-family:var(--f)"
             onclick="window.__toggleFavDetail('${prop.id}',this)">${isFav(prop.id)?'❤️ En favoritos':'🤍 Guardar'}</button>
           <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--bo);font-size:12px;color:var(--t3);line-height:2">
-            📞 +57 310 555 0101<br>📧 arrendador@inmovision360.co<br><span style="color:var(--ac);font-weight:600">✅ Verificado</span>
+            📞 +57 310 555 0101<br>📧 arrendador@nexushabitat.co<br><span style="color:var(--ac);font-weight:600">✅ Verificado</span>
           </div>
         </div>
       </div>
@@ -200,7 +200,7 @@ export async function openWompi(planName, priceLabel) {
   const methods = ['🏦 PSE','📱 Nequi','💙 Daviplata','💳 Tarjeta'];
   ov.innerHTML = `
     <div class="wompi-box">
-      <div style="font-size:22px;font-weight:800;color:var(--pr)">💳 INMOVISIÓN 360 × Wompi</div>
+      <div style="font-size:22px;font-weight:800;color:var(--pr)">💳 Nexus Habitat × Wompi</div>
       <p style="font-size:13px;color:var(--t3);margin-bottom:16px">Pago seguro certificado</p>
       <div style="background:#f9fafb;border-radius:16px;padding:20px;margin-bottom:20px;border:1px solid var(--bo)">
         <div style="font-size:20px;font-weight:700;color:var(--t1)">${sanitize(planName)}</div>
@@ -269,13 +269,43 @@ export async function openPropertyForm(propId = null) {
         <div class="mf span2"><label>🎬 Video YouTube embed</label><input id="fvideo" type="url" value="${sanitize(prop?.video??'')}" placeholder="https://www.youtube.com/embed/…"/></div>
       </div></div>
 
-      <!-- Paso 3 -->
+      <!-- Paso 3 — Fotos y Tour -->
       <div class="fstep-pane" id="fsp-2"><div class="mgrid">
-        <div class="mf span2"><label>📸 URLs de fotos (una por línea)</label>
-          <textarea id="ffotos" rows="4" style="resize:vertical">${sanitize((prop?.fotos??[]).join('\n'))}</textarea>
-          <div style="font-size:11.5px;color:var(--t3);margin-top:4px">La primera foto será la portada.</div></div>
-        <div class="mf span2"><label>🥽 URL Tour Virtual</label>
-          <input id="ftour" type="url" value="${sanitize(prop?.tourUrl??'')}" placeholder="https://my.matterport.com/…"/></div>
+
+        <div class="mf span2">
+          <label>📸 Subir fotos desde tu computador</label>
+          <div id="drop-zone"
+            style="border:2px dashed var(--bo);border-radius:14px;padding:26px;text-align:center;cursor:pointer;background:#f9fafb;transition:.2s"
+            onclick="document.getElementById('file-input').click()"
+            ondragover="event.preventDefault();this.style.borderColor='var(--pr)';this.style.background='#eff3fb'"
+            ondragleave="this.style.borderColor='var(--bo)';this.style.background='#f9fafb'"
+            ondrop="event.preventDefault();this.style.borderColor='var(--bo)';this.style.background='#f9fafb';window.__handleDrop(event)">
+            <div style="font-size:30px;margin-bottom:6px">📁</div>
+            <div style="font-size:14px;font-weight:600;color:var(--t1)">Arrastra fotos aquí o haz clic para elegir</div>
+            <div style="font-size:11.5px;color:var(--t3);margin-top:4px">JPG, PNG, WEBP · Máx. 5 MB por foto · Hasta 20 fotos</div>
+          </div>
+          <input id="file-input" type="file" multiple accept="image/jpeg,image/png,image/webp" style="display:none"/>
+          <div id="foto-preview" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px">
+            ${(prop?.fotos??[]).map((f,i)=>`
+              <div style="position:relative;width:76px;height:76px;border-radius:10px;overflow:hidden;border:2px solid var(--bo)">
+                <img src="${sanitize(f)}" style="width:100%;height:100%;object-fit:cover"/>
+                <button type="button" onclick="window.__removeFotoPreview('existing',${i})"
+                  style="position:absolute;top:2px;right:2px;width:18px;height:18px;border-radius:50%;background:rgba(239,68,68,.9);color:#fff;border:none;cursor:pointer;font-size:10px;display:grid;place-items:center">✕</button>
+                ${i===0?'<div style="position:absolute;bottom:0;left:0;right:0;background:rgba(30,58,138,.8);color:#fff;font-size:9px;text-align:center;padding:2px">Portada</div>':''}
+              </div>`).join('')}
+          </div>
+        </div>
+
+        <div class="mf span2">
+          <label style="color:var(--t3);font-size:10px">O pega URLs externas (alternativa si no subes archivos)</label>
+          <textarea id="ffotos" rows="2" style="resize:none;font-size:12px" placeholder="https://foto1.jpg">${sanitize((prop?.fotos??[]).filter(f=>f.startsWith('http')).join('\n'))}</textarea>
+        </div>
+
+        <div class="mf span2">
+          <label>🥽 URL Tour Virtual (Matterport, Floorfy, Kuula…)</label>
+          <input id="ftour" type="url" value="${sanitize(prop?.tourUrl??'')}" placeholder="https://my.matterport.com/show/?m=…"/>
+        </div>
+
       </div></div>
 
       <!-- Paso 4 -->
@@ -308,6 +338,49 @@ export async function openPropertyForm(propId = null) {
     getEl('fok').style.display = s===3?'':'none';
   }
   getEl('fnx').onclick = () => { if (currentStep<3) goStep(currentStep+1); };
+
+  // ── Estado de fotos del wizard ──────────────────────────
+  let _existingFotos = [...(prop?.fotos ?? [])];
+  let _newFiles      = [];
+
+  function _renderPreviews() {
+    const container = document.getElementById('foto-preview');
+    if (!container) return;
+    const all = [
+      ..._existingFotos.map((url, i) => ({ type:'existing', src: url,                          idx: i })),
+      ..._newFiles.map((file, i)      => ({ type:'new',      src: URL.createObjectURL(file),    idx: i })),
+    ];
+    container.innerHTML = all.map((item, pos) => `
+      <div style="position:relative;width:76px;height:76px;border-radius:10px;overflow:hidden;border:2px solid var(--bo)">
+        <img src="${sanitize(item.src)}" style="width:100%;height:100%;object-fit:cover" onerror="this.parentElement.style.background='#e8edf7'"/>
+        <button type="button"
+          onclick="window.__removeFotoPreview('${item.type}',${item.idx})"
+          style="position:absolute;top:2px;right:2px;width:18px;height:18px;border-radius:50%;background:rgba(239,68,68,.9);color:#fff;border:none;cursor:pointer;font-size:10px;display:grid;place-items:center">✕</button>
+        ${pos===0?'<div style=\"position:absolute;bottom:0;left:0;right:0;background:rgba(30,58,138,.8);color:#fff;font-size:9px;text-align:center;padding:2px\">Portada</div>':''}
+      </div>`).join('');
+  }
+
+  window.__removeFotoPreview = (type, idx) => {
+    if (type === 'existing') _existingFotos.splice(idx, 1);
+    else _newFiles.splice(idx, 1);
+    _renderPreviews();
+  };
+
+  window.__handleDrop = (e) => {
+    const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+    _newFiles = [..._newFiles, ...files].slice(0, 20);
+    _renderPreviews();
+  };
+
+  // Activar input file (timeout para esperar que el DOM esté listo)
+  setTimeout(() => {
+    const fi = document.getElementById('file-input');
+    if (fi) fi.onchange = (e) => {
+      _newFiles = [..._newFiles, ...Array.from(e.target.files || [])].slice(0, 20);
+      _renderPreviews();
+      fi.value = '';
+    };
+  }, 150);
   getEl('fbk').onclick = () => { if (currentStep>0) goStep(currentStep-1); };
 
   getEl('hd').onclick=()=>{if(habitaciones>1)habitaciones--;getEl('hv').textContent=habitaciones;};
@@ -329,28 +402,60 @@ export async function openPropertyForm(propId = null) {
     if (!precio||precio<100000)return showToast('Precio mínimo $100.000','error');
     if (!metros||metros<10)    return showToast('Área mínima 10 m²','error');
 
-    const fotosRaw = getEl('ffotos').value.trim();
-    const fotos    = fotosRaw ? fotosRaw.split(/[\n,]+/).map(s=>s.trim()).filter(s=>s.startsWith('http')) : [];
-    const tourUrl  = getEl('ftour').value.trim();
+    // Fotos: las que ya existían + URLs externas escritas a mano
+    const fotosRaw   = getEl('ffotos')?.value?.trim() || '';
+    const urlFotos   = fotosRaw.split(/[\n,]+/).map(s=>s.trim()).filter(s=>s.startsWith('http'));
+    const fotosBase  = [...(_existingFotos || []), ...urlFotos];
+
+    const tourUrl = getEl('ftour').value.trim();
     const data = {
       titulo, ciudad, barrio: getEl('fb').value.trim(), tipo,
       listing: getEl('fls').value, precio, metros,
       estrato:      parseInt(getEl('fest').value)||undefined,
       parqueaderos: parseInt(getEl('fpark').value)||0,
-      habitaciones, banos, fotos,
-      video:       getEl('fvideo').value.trim()||undefined,
+      habitaciones, banos,
+      fotos:       fotosBase,
+      video:       getEl('fvideo')?.value?.trim()||undefined,
       tourUrl:     tourUrl||undefined,
       tourVirtual: !!tourUrl,
       comodidades: Array.from(ov.querySelectorAll('.am-cb:checked')).map(c=>c.value),
-      mapa2d:      prop?.mapa2d??false,
+      mapa2d:      prop?.mapa2d ?? false,
     };
 
-    getEl('fok').disabled=true; getEl('fok').textContent='⏳ Guardando…';
+    getEl('fok').disabled = true;
+    getEl('fok').textContent = '⏳ Guardando…';
+
     try {
-      if (propId) { await updateProp(propId, data); showToast('Propiedad actualizada ✓','success'); }
-      else        { await addProp(data);             showToast('Propiedad publicada ✓','success'); }
-      ov.remove(); await refreshView();
-    } catch(e) { showToast(e.message||'Error al guardar','error'); getEl('fok').disabled=false; getEl('fok').textContent=propId?'💾 Guardar':'🚀 Publicar'; }
+      let result;
+      if (propId) {
+        result = await updateProp(propId, data);
+        showToast('Propiedad actualizada ✓', 'success');
+      } else {
+        result = await addProp(data);
+        showToast('Propiedad guardada. Subiendo fotos…', 'info');
+      }
+
+      // Subir fotos del PC si las hay
+      const savedId = result?.data?.id || result?.id || propId;
+      if (_newFiles && _newFiles.length > 0 && savedId) {
+        getEl('fok').textContent = `⏳ Subiendo ${_newFiles.length} foto(s)…`;
+        try {
+          const { PropiedadesApi } = await import('../api.js');
+          await PropiedadesApi.uploadFotos(savedId, _newFiles);
+          showToast(`${_newFiles.length} foto(s) subida(s) ✓`, 'success');
+        } catch(uploadErr) {
+          showToast('Guardado OK. Error al subir fotos: ' + (uploadErr.message || ''), 'warning');
+        }
+      }
+
+      ov.remove();
+      await refreshView();
+
+    } catch(e) {
+      showToast(e.message || 'Error al guardar', 'error');
+      getEl('fok').disabled  = false;
+      getEl('fok').textContent = propId ? '💾 Guardar' : '🚀 Publicar';
+    }
   };
 
   const close = () => ov.remove();
@@ -518,54 +623,5 @@ export async function openPagoForm() {
     } catch(e) { showToast(e.message||'Error','error'); getEl('pgok').disabled=false; getEl('pgok').textContent='Registrar'; }
   };
 }
-// ── modules/modals.js ──
-export function openCompleteProfileModal(user) {
-  const ov = createOverlay();
-  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:9999;';
-  ov.innerHTML = `
-    <div class="modal-box" style="max-width:420px;width:90%;padding:28px;background:#fff;border-radius:12px;">
-      <h2 style="font-size:20px;font-weight:800;color:var(--t1);margin-bottom:4px">Termina de verificar tu perfil</h2>
-      <p style="font-size:13px;color:var(--t2);margin-bottom:18px">Ya iniciaste sesión con Google. Confirma estos datos para continuar.</p>
-      <div class="afl">
-        <label>Nombre</label>
-        <input id="cp-name" type="text" value="${sanitize(user.nombre ?? '')}"/>
-      </div>
-      <div class="afl">
-        <label>Apellido</label>
-        <input id="cp-apellido" type="text" value="${sanitize(user.apellido ?? '')}"/>
-      </div>
-      <div class="afl">
-        <label>Correo</label>
-        <input type="email" value="${sanitize(user.email ?? '')}" disabled/>
-      </div>
-      <div class="afl">
-        <label>Teléfono</label>
-        <input id="cp-phone" type="tel" placeholder="+57 300 000 0000"/>
-      </div>
-      <div class="afl">
-        <label>Tu rol</label>
-        <div class="role-grid">
-          <label class="ro">
-            <input type="radio" name="cp-rol" value="arrendador"/>
-            <div class="rb">
-              <div class="rb-ico">🏠</div>
-              <div class="rb-name">Arrendador</div>
-              <div class="rb-desc">Publico propiedades</div>
-            </div>
-          </label>
-          <label class="ro">
-            <input type="radio" name="cp-rol" value="inquilino"/>
-            <div class="rb">
-              <div class="rb-ico">🔑</div>
-              <div class="rb-name">Inquilino</div>
-              <div class="rb-desc">Busco propiedad</div>
-            </div>
-          </label>
-        </div>
-      </div>
-      <button class="btn-auth" style="margin-top:8px" onclick="window.__completeProfile()">Continuar</button>
-    </div>`;
-}
-
 
 export { markPagoAsPaid };

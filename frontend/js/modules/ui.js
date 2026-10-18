@@ -109,6 +109,46 @@ export async function showView(name) {
   };
   if (renderers[name]) await renderers[name](el);
   await updateBadges();
+
+  // ── Handlers globales para acciones de filas ─────────────
+  window.__updateLeadEstado = async function(leadId, nuevoEstado) {
+    try {
+      const { LeadsApi } = await import('../api.js');
+      await LeadsApi.update(leadId, { estado: nuevoEstado });
+      showToast('Lead actualizado ✓', 'success');
+    } catch(e) { showToast(e.message || 'Error', 'error'); }
+  };
+
+  window.__deleteLead = async function(leadId) {
+    if (!confirm('¿Eliminar este lead?')) return;
+    try {
+      const { LeadsApi } = await import('../api.js');
+      await LeadsApi.remove(leadId);
+      showToast('Lead eliminado', 'error');
+      await refreshView();
+    } catch(e) { showToast(e.message || 'Error', 'error'); }
+  };
+
+  window.__deleteVisita = async function(visitaId) {
+    if (!confirm('¿Eliminar esta visita?')) return;
+    try {
+      const { VisitasApi } = await import('../api.js');
+      await VisitasApi.remove(visitaId);
+      showToast('Visita eliminada', 'error');
+      await refreshView();
+      await updateBadges();
+    } catch(e) { showToast(e.message || 'Error', 'error'); }
+  };
+
+  window.__deletePago = async function(pagoId) {
+    if (!confirm('¿Eliminar este registro de pago?')) return;
+    try {
+      const { PagosApi } = await import('../api.js');
+      await PagosApi.updateEstado(pagoId, 'cancelado');
+      showToast('Pago cancelado y eliminado', 'error');
+      await refreshView();
+    } catch(e) { showToast(e.message || 'Error', 'error'); }
+  };
 }
 
 export async function refreshView() { await showView(currentView); }
@@ -303,735 +343,88 @@ async function renderVisitas(el) {
     '<button class="btn-a" onclick="window.__openVisitaForm()">+ Agendar</button></div>' +
     '<div class="tbl-wrap">' +
       '<div class="t-head" style="grid-template-columns:1fr 1.4fr .9fr .8fr 1.2fr">' +
-        '<span>Cliente</span><span>Propiedad</span><span>Fecha</span><span>Hora</span><span>Estado</span>' +
+        '<span>Cliente</span><span>Propiedad</span><span>Fecha</span><span>Hora</span><span>Estado / Acción</span>' +
       '</div>' +
       '<div id="vb">' + (rows || '<div style="padding:30px;text-align:center;color:var(--t3)">Sin visitas</div>') + '</div>' +
     '</div>';
 }
 
 // ── Mensajes ───────────────────────────────────────────────────
-
-function getConversationName(conversation) {
-  if (!conversation) return '—';
-
-  if (conversation.usuario) {
-    return (
-      (conversation.usuario.nombre || '') +
-      ' ' +
-      (conversation.usuario.apellido || '')
-    ).trim() || 'Usuario';
-  }
-
-  return 'Usuario';
-}
-
-function getConversationInitial(conversation) {
-  const nombre = getConversationName(conversation);
-
-  return nombre.charAt(0)
-    ? nombre.charAt(0).toUpperCase()
-    : 'U';
-}
-
-function getConversationProperty(conversation) {
-  if (!conversation?.propiedad) {
-    return null;
-  }
-
-  return conversation.propiedad;
-}
-
-function getPropertyImage(propiedad) {
-  if (!propiedad?.fotos) {
-    return '';
-  }
-
-  try {
-    const fotos =
-      typeof propiedad.fotos === 'string'
-        ? JSON.parse(propiedad.fotos)
-        : propiedad.fotos;
-
-    if (Array.isArray(fotos) && fotos.length) {
-      return fotos[0];
-    }
-  } catch (_) {}
-
-  return '';
-}
-
-function renderConversationListHtml(msgs) {
-  return msgs.map(function(c) {
-    const nombre =
-      getConversationName(c);
-
-    const inicial =
-      getConversationInitial(c);
-
-    const ultimo =
-      c.ultimoMensaje || {};
-
-    const hora =
-      ultimo.createdAt
-        ? new Date(
-            ultimo.createdAt
-          ).toLocaleTimeString(
-            'es-CO',
-            {
-              hour: '2-digit',
-              minute: '2-digit'
-            }
-          )
-        : '';
-
-    const propiedad =
-      getConversationProperty(c);
-
-    const titulo =
-      propiedad?.titulo ||
-      'Conversación';
-
-    const preview =
-      ultimo.texto || '';
-
-    const unread =
-      Number(c.unreadCount || 0);
-
-    return (
-      '<div class="msg-row' +
-      (selectedMsg === c.id
-        ? ' sel'
-        : '') +
-      '" onclick="window.__selectMsg(\'' +
-      c.id +
-      '\')">' +
-
-        '<div class="msg-av">' +
-          inicial +
-        '</div>' +
-
-        '<div style="flex:1;min-width:0">' +
-
-          '<div style="display:flex;justify-content:space-between;gap:8px;margin-bottom:2px">' +
-
-            '<span style="font-size:13px;font-weight:' +
-              (unread > 0 ? '700' : '500') +
-              ';color:var(--t1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
-              sanitize(nombre) +
-            '</span>' +
-
-            '<span style="font-size:11px;color:var(--t3);flex-shrink:0">' +
-              hora +
-            '</span>' +
-
-          '</div>' +
-
-          '<p style="font-size:12px;color:var(--t2);margin:0 0 2px;font-weight:' +
-            (unread > 0 ? '600' : '400') +
-            ';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' +
-            sanitize(titulo) +
-          '</p>' +
-
-          '<p style="font-size:12px;color:var(--t3);margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' +
-            sanitize(preview) +
-          '</p>' +
-
-        '</div>' +
-
-        (
-          unread > 0
-            ? '<div style="min-width:18px;height:18px;padding:0 5px;border-radius:10px;background:var(--ac);color:#fff;font-size:10px;font-weight:700;display:grid;place-items:center;align-self:center">' +
-                unread +
-              '</div>'
-            : ''
-        ) +
-
-      '</div>'
-    );
-  }).join('') ||
-  '<div style="padding:30px;text-align:center;color:var(--t3)">Sin mensajes</div>';
-}
-
-
 async function renderMensajes(el) {
-  const msgs =
-    await getMensajes();
+  const msgs = await getMensajes();
 
-  const inboxHtml =
-    renderConversationListHtml(msgs);
+  var inboxHtml = msgs.map(function(m) {
+    var nombre = (m.de && m.de.nombre) ? (m.de.nombre + ' ' + (m.de.apellido || '')) : (m.de || '—');
+    var inicial = nombre[0] ? nombre[0].toUpperCase() : 'U';
+    var hora    = m.createdAt ? new Date(m.createdAt).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}) : '';
+    var titulo  = (m.propiedad && m.propiedad.titulo) ? m.propiedad.titulo : '—';
+    return '<div class="msg-row' + (selectedMsg === m.id ? ' sel' : '') + '" onclick="window.__selectMsg(\'' + m.id + '\')">' +
+      '<div class="msg-av">' + inicial + '</div>' +
+      '<div style="flex:1;min-width:0">' +
+        '<div style="display:flex;justify-content:space-between;margin-bottom:2px">' +
+          '<span style="font-size:13px;font-weight:' + (m.leido ? '400' : '700') + ';color:var(--t1)">' + sanitize(nombre) + '</span>' +
+          '<span style="font-size:11px;color:var(--t3)">' + hora + '</span>' +
+        '</div>' +
+        '<p style="font-size:12px;color:var(--t2);margin:0 0 2px;font-weight:' + (m.leido ? '400' : '600') + '">' + sanitize(titulo) + '</p>' +
+        '<p style="font-size:12px;color:var(--t3);margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + sanitize(m.texto) + '</p>' +
+      '</div>' +
+      (!m.leido ? '<div style="width:7px;height:7px;border-radius:50%;background:var(--ac);margin-top:5px;flex-shrink:0"></div>' : '') +
+    '</div>';
+  }).join('') || '<div style="padding:30px;text-align:center;color:var(--t3)">Sin mensajes</div>';
 
   el.innerHTML =
-    '<div class="topbar" style="padding-bottom:14px">' +
-      '<h1 class="pg-title">Mensajes</h1>' +
-    '</div>' +
-
-    '<div class="msg-layout" id="msg-layout">' +
-
-      '<div class="msg-inbox" id="msg-inbox">' +
-        inboxHtml +
-      '</div>' +
-
-      '<div id="msg-det" class="msg-chat">' +
-
-        '<div class="msg-empty">' +
-          '<div class="msg-empty-inner">' +
-            '<div class="msg-empty-icon">💬</div>' +
-            '<div style="font-size:15px;font-weight:600;color:var(--t1);margin-bottom:5px">' +
-              'Tus conversaciones' +
-            '</div>' +
-            '<div style="font-size:13px;line-height:1.5">' +
-              'Selecciona una conversación para comenzar' +
-            '</div>' +
-          '</div>' +
-        '</div>' +
-
-      '</div>' +
-
+    '<div class="topbar" style="padding-bottom:14px"><h1 class="pg-title">Mensajes</h1></div>' +
+    '<div class="msg-layout">' +
+      '<div class="msg-inbox" id="msg-inbox">' + inboxHtml + '</div>' +
+      '<div id="msg-det" style="display:grid;place-items:center;color:var(--t3);font-size:14px">Selecciona un mensaje</div>' +
     '</div>';
 }
 
+export async function selectMessage(id) {
+  const msgs = State.mensajes || [];
+  const msg  = msgs.find(function(m) { return m.id === id; });
+  if (!msg) return;
+  await markMensajeRead(id);
+  selectedMsg = id;
 
-export async function selectMessage(userId) {
+  var nombre = (msg.de && msg.de.nombre) ? (msg.de.nombre + ' ' + (msg.de.apellido || '')) : (msg.de || '—');
+  var titulo = (msg.propiedad && msg.propiedad.titulo) ? msg.propiedad.titulo : '—';
+  var inicial = nombre[0] ? nombre[0].toUpperCase() : 'U';
 
-  console.log('CHAT: selectMessage', userId);
-
-  const conversations =
-    State.mensajes || [];
-
-  const conversation =
-    conversations.find(
-      function(c) {
-        return c.id === userId;
-      }
-    );
-
-  if (!conversation) {
-    console.log('CHAT: conversación no encontrada');
-    return;
-  }
-
-  selectedMsg =
-    userId;
-
-  const nombre =
-    getConversationName(
-      conversation
-    );
-
-  const inicial =
-    getConversationInitial(
-      conversation
-    );
-
-  const propiedad =
-    getConversationProperty(
-      conversation
-    );
-
-  const historyResponse =
-    await MensajesApi.getConversacion(
-      userId
-    );
-
-  const history =
-    historyResponse?.ok
-      ? historyResponse.data
-      : [];
-
-  await MensajesApi.markConversationRead(
-    userId
-  );
-
-  const det =
-    getEl('msg-det');
-
-  if (!det) {
-    console.log('CHAT: no existe msg-det');
-    return;
-  }
-
-  let mensajesHtml = '';
-
-  if (!history.length) {
-
-    mensajesHtml =
-      '<div style="height:100%;display:grid;place-items:center;text-align:center;color:var(--t3);padding:30px">' +
-        'No hay mensajes todavía' +
-      '</div>';
-
-  } else {
-
-    mensajesHtml =
-      history.map(
-        function(m) {
-
-          const isMine =
-            State.session &&
-            m.deId === State.session.id;
-
-          const prop =
-            m.propiedad;
-
-          const propImage =
-            getPropertyImage(
-              prop
-            );
-
-          let propertyHtml =
-            '';
-
-          if (prop) {
-
-            propertyHtml =
-              '<div class="msg-property">' +
-
-                (
-                  propImage
-                    ? '<img class="msg-property-image" src="' +
-                        sanitize(propImage) +
-                        '">' 
-                    : ''
-                ) +
-
-                '<div class="msg-property-info">' +
-
-                  '<div class="msg-property-title">' +
-                    sanitize(
-                      prop.titulo ||
-                      'Propiedad'
-                    ) +
-                  '</div>' +
-
-                  (
-                    prop.precio
-                      ? '<div class="msg-property-price">' +
-                          formatCOP(
-                            prop.precio
-                          ) +
-                        '</div>'
-                      : ''
-                  ) +
-
-                '</div>' +
-
-              '</div>';
-          }
-
-          const hora =
-            m.createdAt
-              ? new Date(
-                  m.createdAt
-                ).toLocaleTimeString(
-                  'es-CO',
-                  {
-                    hour: '2-digit',
-                    minute: '2-digit'
-                  }
-                )
-              : '';
-
-          return (
-
-            '<div class="msg-bubble-row ' +
-              (
-                isMine
-                  ? 'mine'
-                  : 'theirs'
-              ) +
-            '">' +
-
-              '<div class="msg-bubble ' +
-                (
-                  isMine
-                    ? 'mine'
-                    : 'theirs'
-                ) +
-              '">' +
-
-                propertyHtml +
-
-                '<div class="msg-bubble-text">' +
-                  sanitize(
-                    m.texto || ''
-                  ) +
-                '</div>' +
-
-                '<div class="msg-bubble-time">' +
-                  hora +
-                '</div>' +
-
-              '</div>' +
-
-            '</div>'
-          );
-        }
-      ).join('');
-  }
+  var det = getEl('msg-det');
+  if (!det) return;
 
   det.innerHTML =
-
-    '<div class="msg-chat-head">' +
-
-      '<button class="msg-back" id="msg-back" type="button" aria-label="Volver">' +
-        '‹' +
-      '</button>' +
-
-      '<div class="msg-av" style="width:44px;height:44px;min-width:44px;font-size:14px">' +
-        inicial +
+    '<div style="padding:24px;display:flex;flex-direction:column;height:100%">' +
+      '<div style="display:flex;align-items:center;gap:13px;margin-bottom:18px;padding-bottom:15px;border-bottom:1px solid var(--bo)">' +
+        '<div class="msg-av" style="width:44px;height:44px;font-size:14px">' + inicial + '</div>' +
+        '<div><h3 style="font-size:15px;font-weight:700;color:var(--t1);margin:0 0 2px">' + sanitize(nombre) + '</h3>' +
+             '<p style="font-size:12px;color:var(--t2);margin:0">📍 ' + sanitize(titulo) + '</p></div>' +
       '</div>' +
-
-      '<div class="msg-chat-head-info">' +
-
-        '<h3 class="msg-chat-head-name">' +
-          sanitize(nombre) +
-        '</h3>' +
-
-        (
-          propiedad
-            ? '<p class="msg-chat-head-property">📍 ' +
-                sanitize(
-                  propiedad.titulo ||
-                  'Propiedad'
-                ) +
-              '</p>'
-            : ''
-        ) +
-
+      '<div style="flex:1;background:#f9fafb;border-radius:12px;padding:16px;margin-bottom:14px">' +
+        '<p style="font-size:14px;color:var(--t1);line-height:1.7;margin:0">' + sanitize(msg.texto) + '</p>' +
       '</div>' +
-
-    '</div>' +
-
-    '<div id="conversation-messages" class="msg-chat-messages">' +
-      mensajesHtml +
-    '</div>' +
-
-    '<div class="msg-composer">' +
-
-      '<textarea id="reply-txt" placeholder="Escribe una respuesta…" rows="1"></textarea>' +
-
-      '<button class="btn-a" id="btn-reply" type="button">' +
-        'Enviar' +
-      '</button>' +
-
+      '<div style="display:flex;gap:8px">' +
+        '<textarea id="reply-txt" placeholder="Escribe una respuesta…" style="flex:1;padding:9px 12px;border:1.5px solid var(--bo);border-radius:10px;font-size:13px;resize:none;height:46px;outline:none;font-family:var(--f)"></textarea>' +
+        '<button class="btn-a" id="btn-reply" style="padding:9px 18px">Enviar</button>' +
+      '</div>' +
     '</div>';
 
-  const layout =
-    getEl('msg-layout');
-
-  if (layout) {
-    layout.classList.add(
-      'chat-open'
-    );
-  }
-
-  const conversationBox =
-    getEl(
-      'conversation-messages'
-    );
-
-  if (conversationBox) {
-    conversationBox.scrollTop =
-      conversationBox.scrollHeight;
-  }
-
-  const backBtn =
-    getEl('msg-back');
-
-  if (backBtn) {
-
-    backBtn.onclick =
-      function(e) {
-
-        if (e) {
-          e.preventDefault();
-          e.stopPropagation();
-        }
-
-        if (layout) {
-          layout.classList.remove(
-            'chat-open'
-          );
-        }
-
-        selectedMsg =
-          null;
-
-        document
-          .querySelectorAll(
-            '.msg-row'
-          )
-          .forEach(
-            function(row) {
-              row.classList.remove(
-                'sel'
-              );
-            }
-          );
-      };
-  }
-
-  const replyBtn =
-    getEl('btn-reply');
-
-  if (replyBtn) {
-
-    replyBtn.onclick =
-      async function(e) {
-
-        console.log(
-          'CHAT: CLICK ENVIAR'
-        );
-
-        if (e) {
-          e.preventDefault();
-          e.stopPropagation();
-        }
-
-        const input =
-          getEl('reply-txt');
-
-        const text =
-          input
-            ? input.value.trim()
-            : '';
-
-        if (!text) {
-          return;
-        }
-
-        replyBtn.disabled =
-          true;
-
-        try {
-
-          let propId =
-            null;
-
-          for (
-            let i =
-              history.length - 1;
-            i >= 0;
-            i--
-          ) {
-
-            if (
-              history[i].propId
-            ) {
-
-              propId =
-                history[i].propId;
-
-              break;
-            }
-          }
-
-          if (!propId) {
-
-            showToast(
-              'No se encontró la propiedad asociada a esta conversación',
-              'error'
-            );
-
-            return;
-          }
-
-          console.log(
-            'CHAT: ENVIANDO AL BACKEND'
-          );
-
-          const response =
-            await MensajesApi.send({
-              destinatario_id:
-                userId,
-
-              prop_id:
-                propId,
-
-              texto:
-                text
-            });
-
-          console.log(
-            'CHAT: RESPUESTA BACKEND',
-            response
-          );
-
-          if (!response?.ok) {
-
-            showToast(
-              response?.error?.message ||
-              'No se pudo enviar el mensaje',
-              'error'
-            );
-
-            return;
-          }
-
-          if (input) {
-            input.value =
-              '';
-          }
-
-          showToast(
-            'Mensaje enviado ✓',
-            'success'
-          );
-
-          console.log(
-            'CHAT: ACTUALIZANDO CONVERSACIONES'
-          );
-
-          const updatedConversation =
-            await getMensajes();
-
-          State.mensajes =
-            updatedConversation;
-
-          console.log(
-            'CHAT: CONVERSACIONES ACTUALIZADAS'
-          );
-
-          if (
-            selectedMsg ===
-            userId
-          ) {
-
-            console.log(
-              'CHAT: VOLVIENDO A RENDERIZAR CONVERSACION'
-            );
-
-            await selectMessage(
-              userId
-            );
-
-            console.log(
-              'CHAT: CONVERSACION RENDERIZADA'
-            );
-          }
-
-          const inbox =
-            getEl('msg-inbox');
-
-          if (inbox) {
-
-            inbox.innerHTML =
-              renderConversationListHtml(
-                State.mensajes || []
-              );
-          }
-
-        } catch (error) {
-
-          console.error(
-            'CHAT: ERROR ENVIANDO MENSAJE',
-            error
-          );
-
-          showToast(
-            'No se pudo enviar el mensaje',
-            'error'
-          );
-
-        } finally {
-
-          replyBtn.disabled =
-            false;
-        }
-      };
-  }
-
-  const replyInput =
-    getEl('reply-txt');
-
-  if (replyInput) {
-
-    replyInput.onkeydown =
-      function(e) {
-
-        if (
-          e.key === 'Enter' &&
-          !e.shiftKey
-        ) {
-
-          e.preventDefault();
-          e.stopPropagation();
-
-          console.log(
-            'CHAT: ENTER DETECTADO'
-          );
-
-          if (
-            replyBtn &&
-            !replyBtn.disabled
-          ) {
-
-            replyBtn.click();
-          }
-
-          return false;
-        }
-      };
-
-    replyInput.onkeypress =
-      function(e) {
-
-        if (
-          e.key === 'Enter'
-        ) {
-          e.stopPropagation();
-        }
-      };
-
-    replyInput.oninput =
-      function() {
-
-        this.style.height =
-          'auto';
-
-        this.style.height =
-          Math.min(
-            this.scrollHeight,
-            120
-          ) + 'px';
-      };
-  }
-
-  document
-    .querySelectorAll(
-      '.msg-row'
-    )
-    .forEach(
-      function(row) {
-
-        row.classList.remove(
-          'sel'
-        );
-
-        const onclick =
-          row.getAttribute(
-            'onclick'
-          ) || '';
-
-        if (
-          onclick.includes(
-            "'" +
-            userId +
-            "'"
-          )
-        ) {
-
-          row.classList.add(
-            'sel'
-          );
-        }
-      }
-    );
-
+  var replyBtn = getEl('btn-reply');
+  if (replyBtn) replyBtn.onclick = async function() {
+    var text = getEl('reply-txt') ? getEl('reply-txt').value.trim() : '';
+    if (!text) return;
+    await MensajesApi.send({ destinatario_id: msg.deId, prop_id: msg.propId, texto: text });
+    showToast('Respuesta enviada ✓','success');
+    if (getEl('reply-txt')) getEl('reply-txt').value = '';
+  };
+
+  document.querySelectorAll('.msg-row').forEach(function(r) { r.classList.remove('sel'); });
+  var activeRow = document.querySelector('.msg-row[onclick*="' + id + '"]');
+  if (activeRow) activeRow.classList.add('sel');
   await updateBadges();
 }
 
-window.__selectMsg =
-  selectMessage;
 // ── CRM ────────────────────────────────────────────────────────
 async function renderCRM(el) {
   const leads = await getLeads();
@@ -1042,7 +435,7 @@ async function renderCRM(el) {
     var propTitulo = (l.propiedad && l.propiedad.titulo) ? l.propiedad.titulo : (l.prop || '—');
     var color = stColors[l.estado] || '#94a3b8';
     var scoreColor = l.score > 70 ? 'var(--ac)' : l.score > 40 ? 'var(--wa)' : 'var(--da)';
-    return '<div class="t-row" style="grid-template-columns:.8fr 1.2fr .6fr .5fr 1fr .6fr;background:' + (i%2?'#f9fafb':'#fff') + '">' +
+    return '<div class="t-row" style="grid-template-columns:.8fr 1.2fr .6fr .5fr .9fr 1.1fr;background:' + (i%2?'#f9fafb':'#fff') + '">' +
       '<span style="font-size:13px;font-weight:600">' + sanitize(l.nombre) + '</span>' +
       '<span style="font-size:12px;color:var(--t2)">' + sanitize(propTitulo) + '</span>' +
       '<span style="font-size:12px;color:var(--t2)">' + sanitize(l.presupuesto || '—') + '</span>' +
@@ -1053,7 +446,12 @@ async function renderCRM(el) {
         '<span style="font-size:12px;font-weight:600;min-width:26px">' + l.score + '</span>' +
       '</div>' +
       '<span class="badge" style="background:' + color + '22;color:' + color + '">' + sanitize(l.estado) + '</span>' +
-      '<span style="font-size:12px;color:var(--t3)">' + sanitize(l.fuente) + '</span>' +
+      '<div style="display:flex;gap:4px;align-items:center">' +
+        '<select style="font-size:10px;border:1px solid var(--bo);border-radius:6px;padding:2px 4px;cursor:pointer;font-family:var(--f);color:var(--t2);max-width:90px" onchange="window.__updateLeadEstado(\'' + l.id + '\',this.value)">' +
+          ['new','contactado','interesado','visita_agendada','lost'].map(function(s){ return '<option value="' + s + '"' + (l.estado===s?' selected':'') + '>' + s + '</option>'; }).join('') +
+        '</select>' +
+        '<button style="font-size:10px;color:var(--da);border:1px solid #fecaca;border-radius:6px;padding:2px 7px;background:#fef2f2;cursor:pointer;font-family:var(--f)" onclick="window.__deleteLead(\'' + l.id + '\')" title="Eliminar lead">🗑</button>' +
+      '</div>' +
     '</div>';
   }).join('');
 
@@ -1067,7 +465,7 @@ async function renderCRM(el) {
     '</div>' +
     '<div class="tbl-wrap" style="margin-top:20px">' +
       '<div class="t-head" style="grid-template-columns:.8fr 1.2fr .6fr .5fr 1fr .6fr">' +
-        '<span>Nombre</span><span>Propiedad</span><span>Presupuesto</span><span>Score</span><span>Estado</span><span>Fuente</span>' +
+        '<span>Nombre</span><span>Propiedad</span><span>Presupuesto</span><span>Score</span><span>Estado</span><span>Acciones</span>' +
       '</div>' +
       (rows || '<div style="padding:30px;text-align:center;color:var(--t3)">Sin leads</div>') +
     '</div>';
@@ -1131,7 +529,8 @@ async function renderPagos(el) {
       '<span style="font-size:11px;padding:2px 8px;border-radius:99px;background:#f3f4f6;color:var(--t2)">' + (p.metodo||'—') + '</span>' +
       '<div style="display:flex;align-items:center;gap:7px">' +
         '<span class="badge ' + badgeClass + '">' + p.estado.toUpperCase() + '</span>' +
-        (p.estado !== 'pagado' ? '<button style="font-size:11px;color:var(--ac);border:1px solid #a7f3d0;border-radius:7px;padding:3px 8px;background:#f0fdf4;cursor:pointer;font-family:var(--f);font-weight:600" onclick="window.__markPago(\'' + p.id + '\')">✓</button>' : '') +
+        (p.estado !== 'pagado' ? '<button style="font-size:11px;color:var(--ac);border:1px solid #a7f3d0;border-radius:7px;padding:3px 8px;background:#f0fdf4;cursor:pointer;font-family:var(--f);font-weight:600" onclick="window.__markPago(\'' + p.id + '\')">✓ Pagar</button>' : '') +
+        '<button style="font-size:11px;color:var(--da);border:1px solid #fecaca;border-radius:7px;padding:3px 7px;background:#fef2f2;cursor:pointer;font-family:var(--f)" onclick="window.__deletePago(\'' + p.id + '\')" title="Eliminar">🗑</button>' +
       '</div>' +
     '</div>';
   }).join('');
