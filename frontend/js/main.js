@@ -208,21 +208,29 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (token) {
     const user = await loadMe();
     if (user) {
-      if (user.perfilCompleto === false) {
-        // Sesión de Google válida, pero el perfil quedó incompleto
+      try {
+        if (user.perfilCompleto === false) {
+          // Sesión de Google válida, pero el perfil quedó incompleto
+          const { openCompleteProfileModal } = await import('./modules/modals.js');
+          if (typeof openCompleteProfileModal !== 'function') throw new Error('openCompleteProfileModal no disponible');
+          getEl('landing').style.display = 'none';
+          getEl('auth').style.display    = 'none';
+          openCompleteProfileModal(user);
+          return;
+        }
+        await loadFavs();
+        const { initApp } = await import('./modules/ui.js');
         getEl('landing').style.display = 'none';
         getEl('auth').style.display    = 'none';
-        const { openCompleteProfileModal } = await import('./modules/modals.js');
-        openCompleteProfileModal(user);
+        getEl('app').style.display     = 'flex';
+        initApp(user);
         return;
+      } catch (e) {
+        // Si falla la restauración de sesión, se vuelve a la landing en vez de dejar la página en blanco
+        console.error('Error restaurando la sesión:', e);
+        getEl('app').style.display     = 'none';
+        getEl('landing').style.display = 'block';
       }
-      await loadFavs();
-      getEl('landing').style.display = 'none';
-      getEl('auth').style.display    = 'none';
-      getEl('app').style.display     = 'flex';
-      const { initApp } = await import('./modules/ui.js');
-      initApp(user);
-      return;
     }
   }
 
