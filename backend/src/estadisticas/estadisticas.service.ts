@@ -9,17 +9,21 @@ export class EstadisticasService {
     const myProps = await this.prisma.propiedad.findMany({ where: { ownerId, deletedAt: null } });
     const propIds = myProps.map(p => p.id);
 
-    const [visitas, pagadoAgg, mensajes, leads] = await Promise.all([
+    const mesActual = new Date().toISOString().slice(0, 7); // YYYY-MM (fecha se guarda como AAAA-MM-DD)
+
+    const [visitas, pagadoMes, pagadoTotal, mensajes, leads] = await Promise.all([
       this.prisma.visitas.count({ where: { propId: { in: propIds } } }),
+      this.prisma.pago.aggregate({ where: { ownerId, estado: 'pagado', fecha: { startsWith: mesActual } }, _sum: { monto: true } }),
       this.prisma.pago.aggregate({ where: { ownerId, estado: 'pagado' }, _sum: { monto: true } }),
       this.prisma.mensaje.count({ where: { paraId: ownerId, leido: false } }),
-      this.prisma.lead.count({ where: { ownerId } }),
+      this.prisma.lead.count({ where: { ownerId, estado: { not: 'lost' } } }),
     ]);
 
     return {
       props_activas:   myProps.length,
       visitas_total:   visitas,
-      ingresos_mes:    pagadoAgg._sum.monto ?? 0,
+      ingresos_mes:    pagadoMes._sum.monto ?? 0,
+      ingresos_total:  pagadoTotal._sum.monto ?? 0,
       mensajes_nuevos: mensajes,
       leads_activos:   leads,
     };
@@ -42,6 +46,7 @@ export class EstadisticasService {
   }
 
   async ingresosPorMes(ownerId: string, meses = 6) {
+    meses = Number.isFinite(meses) ? Math.min(24, Math.max(1, Math.floor(meses))) : 6;
     const pagos = await this.prisma.pago.findMany({
       where:   { ownerId, estado: 'pagado' },
       orderBy: { fecha: 'asc' },

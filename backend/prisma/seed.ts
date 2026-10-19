@@ -1,21 +1,14 @@
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import { upsertPlanes } from './planes';
 
 const prisma = new PrismaClient();
 
 async function main() {
   const hash = await bcrypt.hash('demo1234', 10);
 
-  // ── Planes ────────────────────────────────────────────────
-  await prisma.plan.createMany({
-    data: [
-      { id: 'free',         nombre: 'Free',         precio: 0,      propsMax: 5    },
-      { id: 'starter',      nombre: 'Starter',      precio: 49000,  propsMax: 20   },
-      { id: 'professional', nombre: 'Professional', precio: 149000, propsMax: null },
-      { id: 'enterprise',   nombre: 'Enterprise',   precio: 399000, propsMax: null },
-    ],
-    
-  });
+  // ── Planes (upsert: el seed se puede ejecutar varias veces) ─
+  await upsertPlanes(prisma);
 
   // ── Usuarios demo ─────────────────────────────────────────
   const arrendador = await prisma.usuario.upsert({

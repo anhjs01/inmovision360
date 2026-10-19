@@ -62,10 +62,13 @@ model RefreshToken {
 }
 
 model Plan {
-  id        String  @id   // free | starter | professional | enterprise
-  nombre    String
-  precio    Int     @default(0)
-  propsMax  Int?            // null = ilimitado
+  id          String  @id   // free | starter | professional | enterprise | plano_2d | plano_3d
+  nombre      String
+  precio      Int     @default(0)
+  propsMax    Int?            // null = ilimitado
+  categoria   String  @default("suscripcion") // suscripcion | plano (oferta visual, no cambia el plan del usuario)
+  descripcion String?
+  features    String  @default("[]")          // JSON array serializado
 
   @@map("planes")
 }
@@ -83,6 +86,7 @@ model Propiedad {
   banos        Int      @default(1)
   metros       Int
   parqueaderos Int      @default(0)
+  descripcion  String?
   fotos        String   @default("[]")      // JSON array serializado
   comodidades  String   @default("[]")      // JSON array serializado
   video        String?
@@ -160,19 +164,20 @@ model Lead {
 
 model Pago {
   id          String   @id @default(cuid())
-  inquilinoId String
+  inquilinoId String?                        // null = pago directo/general sin inquilino
   propId      String
-  ownerId     String
+  ownerId     String?                        // null = pago general sin arrendador
   monto       Int
   fecha       String
   estado      String   @default("pendiente") // pendiente | pagado | vencido
   metodo      String?
+  concepto    String?                        // ej. canon, administración, depósito
   wompiRef    String?
   createdAt   DateTime @default(now())
 
   inquilino Propiedad @relation(fields: [propId],      references: [id], onDelete: Cascade)
-  inq       Usuario   @relation("InquilinoPagos", fields: [inquilinoId], references: [id])
-  owner     Usuario   @relation("OwnerPagos",    fields: [ownerId],     references: [id])
+  inq       Usuario?  @relation("InquilinoPagos", fields: [inquilinoId], references: [id], onDelete: SetNull)
+  owner     Usuario?  @relation("OwnerPagos",    fields: [ownerId],     references: [id], onDelete: SetNull)
 
   @@map("pagos")
 }

@@ -3,12 +3,18 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ApiException }  from '../common/filters/http-exception.filter';
 import { ErrorCode }     from '../common/constants/error-codes';
 
+function parseJsonArray(value: string): string[] {
+  try { const v = JSON.parse(value ?? '[]'); return Array.isArray(v) ? v : []; } catch { return []; }
+}
+
 @Injectable()
 export class SuscripcionesService {
   constructor(private prisma: PrismaService) {}
 
-  getPlanes() {
-    return this.prisma.plan.findMany({ orderBy: { precio: 'asc' } });
+  // Incluye los planes de suscripción y las ofertas visuales de planos (categoria = 'plano')
+  async getPlanes() {
+    const planes = await this.prisma.plan.findMany({ orderBy: [{ categoria: 'desc' }, { precio: 'asc' }] });
+    return planes.map(p => ({ ...p, features: parseJsonArray(p.features) }));
   }
 
   async getMiPlan(userId: string) {
@@ -23,6 +29,9 @@ export class SuscripcionesService {
   async suscribirse(userId: string, planId: string, metodo: string) {
     const plan = await this.prisma.plan.findUnique({ where: { id: planId } });
     if (!plan) throw new ApiException(ErrorCode.PLAN_NOT_FOUND, 'Plan no encontrado', 'plan_id', HttpStatus.NOT_FOUND);
+    // Las ofertas de planos 2D/3D son solo visuales: no cambian el plan ni los límites del usuario
+    if (plan.categoria !== 'suscripcion')
+      throw new ApiException(ErrorCode.VALIDATION_ERROR, 'Este plan no es una suscripción', 'plan_id');
 
     const ref   = `SUB_${planId}_${Date.now()}`;
     const url   = `https://checkout.wompi.co/p/?public-key=pub_stagtest_&reference=${ref}&currency=COP`;

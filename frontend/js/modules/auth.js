@@ -5,7 +5,7 @@
 
 import { login, register, logout, loadMe, loginGoogle, completeProfile, State } from './store.js';
 import { showToast }   from './ui.js';
-import { getEl }       from '../utils.js';
+import { getEl, sanitize } from '../utils.js';
 import { AuthApi }     from '../api.js';
 
 export function openAuth(tab='l') {
@@ -60,16 +60,19 @@ export async function handleLogin() {
 
   if (!email || !pass) { showError(errEl, 'Completa todos los campos'); return; }
 
+  // El botón siempre se restaura: si no, tras cerrar sesión quedaba deshabilitado
+  const label = btn.textContent;
   btn.disabled = true; btn.textContent = '⏳ Ingresando...';
-
   try {
     const user = await login(email, pass);
-    if (!user) { showError(errEl, 'Email o contraseña incorrectos'); btn.disabled = false; btn.textContent = 'Ingresar'; return; }
+    if (!user) { showError(errEl, 'Email o contraseña incorrectos'); return; }
     errEl.style.display = 'none';
+    getEl('l-pass').value = '';
     launchApp(user);
   } catch (e) {
     showError(errEl, 'Error de conexión con el servidor');
-    btn.disabled = false; btn.textContent = 'Ingresar';
+  } finally {
+    btn.disabled = false; btn.textContent = label;
   }
 }
 
@@ -84,17 +87,20 @@ export async function handleRegister() {
   if (!nombre || !email || !pass || !rolEl) { showError(errEl, 'Completa todos los campos'); return; }
   if (pass.length < 6) { showError(errEl, 'Contraseña mínimo 6 caracteres'); return; }
 
+  const label = btn.textContent;
   btn.disabled = true; btn.textContent = '⏳ Creando cuenta...';
-
   try {
     const [primerNombre, ...resto] = nombre.split(' ');
-    const user = await register({ nombre: primerNombre, apellido: resto.join(' ') || '', email, pass, rol: rolEl.value });
-    if (!user) { showError(errEl, 'Email ya registrado'); btn.disabled = false; btn.textContent = 'Crear cuenta'; return; }
+    const r = await register({ nombre: primerNombre, apellido: resto.join(' ') || '', email, pass, rol: rolEl.value });
+    // Se muestra el mensaje real del backend (email repetido, email inválido, etc.)
+    if (r.error) { showError(errEl, r.error); return; }
     errEl.style.display = 'none';
-    launchApp(user);
+    getEl('r-pass').value = '';
+    launchApp(r.user);
   } catch (e) {
     showError(errEl, 'Error de conexión con el servidor');
-    btn.disabled = false; btn.textContent = 'Crear cuenta';
+  } finally {
+    btn.disabled = false; btn.textContent = label;
   }
 }
 
@@ -117,7 +123,7 @@ export async function handleLogout() {
 function showError(el, msg) {
   if (!el) return;
   el.style.display  = 'flex';
-  el.innerHTML      = `⚠️ ${msg}`;
+  el.innerHTML      = `⚠️ ${sanitize(msg)}`;
 }
 
 function launchApp(user) {

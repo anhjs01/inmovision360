@@ -6,11 +6,12 @@
 import { State, addProp, updateProp, deleteProp, getPropById,
          getMyProps, toggleFav, isFav, addVisita, updateVisita, updateVisitaEstado,
          deleteVisita, solicitarVisita, addLead, updateLead, deleteLead,
-         addPago, updatePago, deletePago, markPagoAsPaid } from './store.js';
-import { showToast, refreshView, updateBadges } from './ui.js';
-import { sanitize, formatCOP, capitalize, getEl, safeUrl,
+         addPago, updatePago, deletePago, markPagoAsPaid,
+         getPlanes, suscribirse, cancelarPlan } from './store.js';
+import { showToast, refreshView, updateBadges, updateSidebarProfile, addPlanoSolicitado } from './ui.js';
+import { sanitize, formatCOP, formatNum, parseCOP, capitalize, getEl, safeUrl,
          CITY_LABELS, AMENITY_LABELS, LISTING_LABELS } from '../utils.js';
-import { MensajesApi, PropiedadesApi, mediaUrl } from '../api.js';
+import { MensajesApi, PropiedadesApi, PagosApi, mediaUrl } from '../api.js';
 
 const MAX_FOTOS      = 20;
 const MAX_FOTO_BYTES = 5 * 1024 * 1024;
@@ -59,6 +60,15 @@ function propOptions(props, selectedId) {
 }
 
 function today() { return new Date().toISOString().slice(0, 10); }
+
+// Formatea un input de dinero con separador de miles mientras se escribe (1800000 → 1.800.000)
+function bindMoneyInput(input) {
+  if (!input) return;
+  input.addEventListener('input', () => {
+    const n = parseCOP(input.value);
+    input.value = Number.isFinite(n) ? formatNum(n) : '';
+  });
+}
 
 // ── Soft Gate ─────────────────────────────────────────────────
 export async function openSoftGate(propId) {
@@ -143,9 +153,7 @@ export async function openDetail(propId) {
 
       ${prop.tourVirtual && tourUrl?`
         <div class="gt-pane${activeTab==='tour'?' active':''}" id="pane-tour" style="padding:16px 20px">
-          <div style="width:100%;aspect-ratio:16/9;border-radius:14px;overflow:hidden;background:#000">
-            <iframe src="${sanitize(tourUrl)}" style="width:100%;height:100%;border:none" allowfullscreen></iframe>
-          </div>
+          ${tourFrameHtml(tourUrl, prop.titulo)}
         </div>`:''}
 
       ${prop.mapa2d?`
@@ -168,11 +176,13 @@ export async function openDetail(propId) {
       <div style="display:grid;grid-template-columns:1fr 280px;gap:20px;padding:20px">
         <div>
           <div style="display:flex;gap:18px;flex-wrap:wrap;padding:14px 0;border-top:1px solid var(--bo);border-bottom:1px solid var(--bo);margin-bottom:16px">
-            <span style="font-size:13px;color:var(--t2)">🛏️ <strong>${prop.habitaciones}</strong> dorm.</span>
-            <span style="font-size:13px;color:var(--t2)">🚿 <strong>${prop.banos}</strong> baños</span>
-            <span style="font-size:13px;color:var(--t2)">📐 <strong>${prop.metros}</strong> m²</span>
-            ${prop.parqueaderos?`<span style="font-size:13px;color:var(--t2)">🚗 <strong>${prop.parqueaderos}</strong> parq.</span>`:''}
+            <span style="font-size:13px;color:var(--t2)">🛏️ <strong>${formatNum(prop.habitaciones)}</strong> dorm.</span>
+            <span style="font-size:13px;color:var(--t2)">🚿 <strong>${formatNum(prop.banos)}</strong> baños</span>
+            <span style="font-size:13px;color:var(--t2)">📐 <strong>${formatNum(prop.metros)}</strong> m²</span>
+            ${prop.parqueaderos?`<span style="font-size:13px;color:var(--t2)">🚗 <strong>${formatNum(prop.parqueaderos)}</strong> parq.</span>`:''}
+            ${prop.metros?`<span style="font-size:13px;color:var(--t2)">💲 <strong>${formatCOP(Math.round(prop.precio / prop.metros))}</strong> /m²</span>`:''}
           </div>
+          ${prop.descripcion?`<p style="font-size:14px;color:var(--t2);line-height:1.7;margin-bottom:18px;white-space:pre-line">${sanitize(prop.descripcion)}</p>`:''}
           <h4 style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px">Comodidades</h4>
           <div style="display:flex;flex-wrap:wrap;gap:7px">
             ${(prop.comodidades??[]).map(a=>`<span class="pc-tg">${AMENITY_LABELS[a]??sanitize(a)}</span>`).join('')}
@@ -180,7 +190,7 @@ export async function openDetail(propId) {
         </div>
         <div style="background:#f9fafb;border:1px solid var(--bo);border-radius:16px;padding:20px;display:flex;flex-direction:column;gap:10px;align-self:start">
           <div style="font-size:28px;font-weight:800;color:var(--pr)">${formatCOP(prop.precio)}</div>
-          <div style="font-size:12px;color:var(--t3);margin-top:-8px">COP / mes</div>
+          <div style="font-size:12px;color:var(--t3);margin-top:-8px">${prop.listing === 'sale' ? 'COP · Venta' : 'COP / mes'}</div>
           ${esInq?`<button class="btn-a" onclick="window.__solicitarVisita('${prop.id}')">📅 Agendar visita</button>`:''}
           ${!esPropia?`<button class="btn-p" style="background:#0f172a" onclick="window.__sendMsg('${prop.id}','${prop.ownerId}')">💬 Contactar arrendador</button>`:''}
           <button id="det-fav-btn" style="padding:10px;border-radius:10px;border:1.5px solid #fed7aa;background:#fff8ed;color:var(--wa);font-size:13px;font-weight:600;cursor:pointer;font-family:var(--f)"
@@ -238,6 +248,77 @@ window.__sendMsg = async (propId, ownerId) => {
   showToast('Mensaje enviado al arrendador ✓','success');
 };
 
+// ── Visor de tours 360° ───────────────────────────────────────
+function tourFrameHtml(url, titulo) {
+  return `<div class="tour-frame">
+      <iframe src="${sanitize(url)}" title="Tour virtual — ${sanitize(titulo ?? '')}" loading="lazy"
+        allow="fullscreen; xr-spatial-tracking; gyroscope; accelerometer; vr" allowfullscreen></iframe>
+      <div class="tour-tools">
+        <button type="button" class="tour-btn" onclick="window.__tourFullscreen(this)" title="Pantalla completa (Esc para salir)">⛶ <span>Pantalla completa</span></button>
+        <a class="tour-btn" href="${sanitize(url)}" target="_blank" rel="noopener noreferrer" title="Abrir en una pestaña nueva">↗</a>
+      </div>
+    </div>`;
+}
+
+// Usa la Fullscreen API; si el navegador no la permite (iOS), expande el visor sobre toda la ventana
+window.__tourFullscreen = (btn) => {
+  const frame = btn.closest('.tour-frame');
+  if (!frame) return;
+  const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+  if (fsEl)                              return (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+  if (frame.classList.contains('tour-fs')) return setPseudoFs(frame, false);
+  const req = frame.requestFullscreen || frame.webkitRequestFullscreen;
+  if (!req) return setPseudoFs(frame, true);
+  try {
+    const r = req.call(frame);
+    if (r && r.catch) r.catch(() => setPseudoFs(frame, true));
+  } catch { setPseudoFs(frame, true); }
+};
+
+function setPseudoFs(frame, on) {
+  frame.classList.toggle('tour-fs', on);
+  document.body.style.overflow = on ? 'hidden' : '';
+  syncTourBtn(frame, on);
+}
+
+function syncTourBtn(frame, on) {
+  const lbl = frame.querySelector('.tour-btn span');
+  if (lbl) lbl.textContent = on ? 'Salir' : 'Pantalla completa';
+}
+
+['fullscreenchange', 'webkitfullscreenchange'].forEach(ev => document.addEventListener(ev, () => {
+  const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+  document.querySelectorAll('.tour-frame').forEach(f => syncTourBtn(f, f === fsEl));
+}));
+
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  document.querySelectorAll('.tour-frame.tour-fs').forEach(f => setPseudoFs(f, false));
+});
+
+// Vista rápida del tour desde la tarjeta, sin abrir todo el detalle
+export async function openTourViewer(propId) {
+  const prop = await getPropById(propId);
+  const url  = safeUrl(prop?.tourUrl);
+  if (!prop || !url) { showToast('Esta propiedad no tiene tour virtual','warning'); return; }
+  const ov = createOverlay();
+  ov.innerHTML = `
+    <div class="modal-box" style="max-width:1100px;width:96vw">
+      <div class="mh">
+        <div><div class="mh-title">🥽 ${sanitize(prop.tourTipo || 'Tour virtual 360°')}</div>
+             <div class="mh-sub">${sanitize(prop.titulo)} · ${formatCOP(prop.precio)} ${prop.listing === 'sale' ? 'COP' : 'COP/mes'}</div></div>
+        <button class="btn-mx" data-x>✕</button>
+      </div>
+      <div style="padding:16px 20px 20px">${tourFrameHtml(url, prop.titulo)}</div>
+      <div class="mf-foot">
+        <button class="btn-g" data-x>Cerrar</button>
+        <button class="btn-a" id="tv-det">Ver detalles de la propiedad</button>
+      </div>
+    </div>`;
+  ov.querySelectorAll('[data-x]').forEach(b => b.onclick = () => ov.remove());
+  ov.querySelector('#tv-det').onclick = () => { ov.remove(); openDetail(propId); };
+}
+
 // ── Wompi ─────────────────────────────────────────────────────
 export async function openWompi(planName, priceLabel) {
   const ov = createOverlay();
@@ -270,6 +351,115 @@ window.__wompiPay = async (method, plan) => {
   setTimeout(() => showToast(`Plan ${plan} activado ✓`,'success'), 1500);
 };
 
+// ── Planes: contratar / cancelar (usa /v1/suscripciones) ──────
+export async function openPlanCheckout(planId) {
+  const plan = (await getPlanes()).find(p => p.id === planId);
+  if (!plan) { showToast('Plan no encontrado','error'); return; }
+  if (plan.categoria === 'plano') return openPlanoCheckout(planId);
+  const gratis  = plan.precio === 0;
+  const methods = [['PSE','🏦 PSE'],['Nequi','📱 Nequi'],['Daviplata','💙 Daviplata'],['Tarjeta','💳 Tarjeta']];
+  let metodo    = 'PSE';
+  const ov = createOverlay();
+  ov.style.zIndex = '600';
+  ov.innerHTML = `
+    <div class="wompi-box">
+      <div style="font-size:22px;font-weight:800;color:var(--pr)">${gratis ? '⭐ Cambiar de plan' : '💳 INMOVISIÓN 360 × Wompi'}</div>
+      <p style="font-size:13px;color:var(--t3);margin-bottom:16px">${gratis ? 'Sin costo' : 'Pago seguro certificado'}</p>
+      <div style="background:#f9fafb;border-radius:16px;padding:20px;margin-bottom:20px;border:1px solid var(--bo)">
+        <div style="font-size:20px;font-weight:700;color:var(--t1)">Plan ${sanitize(plan.nombre)}</div>
+        <div style="font-size:34px;font-weight:800;color:var(--pr);margin-top:4px">${gratis ? 'Gratis' : formatCOP(plan.precio)}${gratis ? '' : '<span style="font-size:14px;font-weight:400;color:var(--t3)"> COP/mes</span>'}</div>
+        <div style="font-size:12.5px;color:var(--t2);margin-top:6px">${plan.propsMax ? `Hasta ${formatNum(plan.propsMax)} propiedades` : 'Propiedades ilimitadas'}</div>
+      </div>
+      ${gratis ? '' : `
+      <div style="font-size:11.5px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.07em;margin-bottom:12px;text-align:left">Método de pago</div>
+      <div class="pay-methods" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px">
+        ${methods.map(([val,lbl]) => `<button type="button" class="pay-m${val===metodo?' active':''}" data-m="${val}">${lbl}</button>`).join('')}
+      </div>
+      <div style="display:flex;align-items:center;gap:9px;padding:12px 14px;background:#f0fdf4;border-radius:12px;margin-bottom:20px">
+        <span style="font-size:18px">🔒</span>
+        <span style="font-size:12.5px;color:var(--t2)">Pago encriptado SSL · Cumple normativa SFC Colombia</span>
+      </div>`}
+      <div style="display:flex;gap:10px">
+        <button class="btn-g" style="flex:1" data-x>Cancelar</button>
+        <button class="btn-a" style="flex:1.4;justify-content:center" id="plan-ok">${gratis ? 'Confirmar cambio' : `Pagar ${formatCOP(plan.precio)}`}</button>
+      </div>
+    </div>`;
+
+  ov.querySelectorAll('[data-m]').forEach(b => b.onclick = () => {
+    metodo = b.dataset.m;
+    ov.querySelectorAll('[data-m]').forEach(x => x.classList.toggle('active', x === b));
+  });
+  ov.querySelector('[data-x]').onclick = () => ov.remove();
+  ov.querySelector('#plan-ok').onclick = async (e) => {
+    try {
+      await withLoading(e.currentTarget, () => suscribirse(plan.id, gratis ? undefined : metodo));
+      ov.remove();
+      showToast(`Plan ${plan.nombre} activado ✓`,'success');
+      updateSidebarProfile();
+      await refreshView();
+    } catch(err) { showToast(err.message || 'No se pudo activar el plan','error'); }
+  };
+}
+
+// Planos 2D/3D: contratación SOLO VISUAL. No llama a /suscripciones ni cambia el plan del usuario
+export async function openPlanoCheckout(planId) {
+  const plano = (await getPlanes()).find(p => p.id === planId && p.categoria === 'plano');
+  if (!plano) { showToast('Oferta no disponible','error'); return; }
+  const props = State.session?.rol === 'arrendador' ? await getMyProps() : [];
+  const ov = createOverlay();
+  ov.style.zIndex = '600';
+  ov.innerHTML = `
+    <div class="wompi-box">
+      <div style="font-size:22px;font-weight:800;color:var(--pr)">${plano.id === 'plano_3d' ? '🧊' : '📐'} ${sanitize(plano.nombre)}</div>
+      <p style="font-size:13px;color:var(--t3);margin-bottom:16px">${sanitize(plano.descripcion ?? '')}</p>
+      <div style="background:#f9fafb;border-radius:16px;padding:18px 20px;margin-bottom:18px;border:1px solid var(--bo);text-align:left">
+        <div style="font-size:30px;font-weight:800;color:var(--pr)">${formatCOP(plano.precio)}<span style="font-size:13px;font-weight:400;color:var(--t3)"> COP · pago único</span></div>
+        <ul class="plan-feats" style="margin-top:10px">${(plano.features ?? []).map(f => `<li>${sanitize(f)}</li>`).join('')}</ul>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px;text-align:left;margin-bottom:18px">
+        ${props.length ? `<div class="mf"><label>Propiedad</label><select id="pl-prop">${propOptions(props)}</select></div>` : ''}
+        <div class="mf"><label>Teléfono de contacto</label><input id="pl-tel" type="tel" placeholder="+57 300 000 0000" value="${sanitize(State.session?.telefono ?? '')}"/></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:9px;padding:11px 14px;background:#eff3fb;border-radius:12px;margin-bottom:18px;text-align:left">
+        <span style="font-size:18px">ℹ️</span>
+        <span style="font-size:12.5px;color:var(--t2)">Demostración: no se realiza ningún cobro. Un asesor te contactaría para agendar la toma de medidas.</span>
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="btn-g" style="flex:1" data-x>Cancelar</button>
+        <button class="btn-a" style="flex:1.4;justify-content:center" id="pl-ok">Solicitar ${sanitize(plano.nombre)}</button>
+      </div>
+    </div>`;
+  ov.querySelector('[data-x]').onclick = () => ov.remove();
+  ov.querySelector('#pl-ok').onclick = async () => {
+    const tel = getEl('pl-tel').value.trim();
+    if (tel.replace(/\D/g, '').length < 7) return showToast('Ingresa un teléfono de contacto válido','warning');
+    addPlanoSolicitado(plano.id);
+    ov.remove();
+    showToast(`Solicitud de ${plano.nombre} recibida ✓ — te contactaremos pronto`,'success', 4500);
+    await refreshView();
+  };
+}
+
+export async function confirmCancelPlan() {
+  const ok = await confirmDialog('¿Cancelar suscripción?', 'Tu cuenta volverá al plan <strong>Free</strong> y sus límites.', 'Cancelar plan');
+  if (!ok) return;
+  try {
+    await cancelarPlan();
+    showToast('Suscripción cancelada','info');
+    updateSidebarProfile();
+    await refreshView();
+  } catch(e) { showToast(e.message || 'No se pudo cancelar','error'); }
+}
+
+// Inquilino: inicia el checkout de Wompi para un pago pendiente
+export async function pagarPago(pagoId) {
+  const r = await PagosApi.iniciarWompi(pagoId);
+  if (!r?.ok) { showToast(r?.error?.message || 'No se pudo iniciar el pago','error'); return; }
+  const url = r.data?.wompi_checkout_url;
+  if (url && /^https:\/\//.test(url)) window.open(url, '_blank', 'noopener');
+  showToast('Abriendo el checkout de Wompi… el pago se confirmará automáticamente','info', 4500);
+}
+
 // ── Wizard: Crear/Editar propiedad ────────────────────────────
 export async function openPropertyForm(propId = null) {
   const prop = propId ? await getPropById(propId) : null;
@@ -301,7 +491,7 @@ export async function openPropertyForm(propId = null) {
         <div class="mf"><label>Modalidad</label><select id="fls">
           ${['rent','sale','rent_sale','vacation'].map(l=>`<option value="${l}"${prop?.listing===l?' selected':''}>${LISTING_LABELS[l]??l}</option>`).join('')}
         </select></div>
-        <div class="mf"><label>Precio COP/mes *</label><input id="fp" type="number" value="${prop?.precio??''}" placeholder="1800000" min="100000"/></div>
+        <div class="mf"><label>Precio (COP) *</label><input id="fp" inputmode="numeric" autocomplete="off" value="${prop?.precio ? formatNum(prop.precio) : ''}" placeholder="1.800.000"/></div>
         <div class="mf"><label>Estrato</label><select id="fest"><option value="">Sin estrato</option>${[1,2,3,4,5,6].map(e=>`<option value="${e}"${prop?.estrato===e?' selected':''}>${e}</option>`).join('')}</select></div>
       </div></div>
 
@@ -311,6 +501,7 @@ export async function openPropertyForm(propId = null) {
         <div class="mf"><label>Parqueaderos</label><input id="fpark" type="number" value="${prop?.parqueaderos??0}" min="0"/></div>
         <div class="mf"><label>Habitaciones</label><div class="stepper"><button type="button" class="step-b" id="hd">−</button><span class="step-v" id="hv">${habitaciones}</span><button type="button" class="step-b" id="hi">+</button></div></div>
         <div class="mf"><label>Baños</label><div class="stepper"><button type="button" class="step-b" id="bd">−</button><span class="step-v" id="bv">${banos}</span><button type="button" class="step-b" id="bi">+</button></div></div>
+        <div class="mf span2"><label>Descripción</label><textarea id="fdesc" rows="3" maxlength="2000" style="resize:vertical" placeholder="Describe lo mejor del inmueble: vista, acabados, ubicación…">${sanitize(prop?.descripcion??'')}</textarea></div>
         <div class="mf span2"><label>🎬 Video YouTube embed</label><input id="fvideo" type="url" value="${sanitize(prop?.video??'')}" placeholder="https://www.youtube.com/embed/…"/></div>
       </div></div>
 
@@ -374,7 +565,27 @@ export async function openPropertyForm(propId = null) {
     getEl('fnx').style.display = s<3?'':'none';
     getEl('fok').style.display = s===3?'':'none';
   }
-  getEl('fnx').onclick = () => { if (currentStep<3) goStep(currentStep+1); };
+  // Valida los obligatorios del paso actual antes de avanzar
+  function stepError(s) {
+    if (s === 0) {
+      if (!getEl('ft').value.trim())  return 'El título es obligatorio';
+      if (!getEl('fc').value)         return 'Selecciona una ciudad';
+      if (!getEl('ftp').value)        return 'Selecciona un tipo';
+      const pr = parseCOP(getEl('fp').value);
+      if (!pr || pr < 100000)         return 'Precio mínimo $100.000';
+    }
+    if (s === 1) {
+      const m = parseInt(getEl('fm').value);
+      if (!m || m < 10)               return 'Área mínima 10 m²';
+    }
+    return null;
+  }
+  getEl('fnx').onclick = () => {
+    const err = stepError(currentStep);
+    if (err) return showToast(err, 'warning');
+    if (currentStep<3) goStep(currentStep+1);
+  };
+  bindMoneyInput(getEl('fp'));
   getEl('fbk').onclick = () => { if (currentStep>0) goStep(currentStep-1); };
 
   // ── Estado de fotos del wizard ──────────────────────────
@@ -439,7 +650,7 @@ export async function openPropertyForm(propId = null) {
     const titulo  = getEl('ft').value.trim();
     const ciudad  = getEl('fc').value;
     const tipo    = getEl('ftp').value;
-    const precio  = parseInt(getEl('fp').value);
+    const precio  = parseCOP(getEl('fp').value);
     const metros  = parseInt(getEl('fm').value);
 
     if (!titulo)               return showToast('El título es obligatorio','error');
@@ -462,6 +673,7 @@ export async function openPropertyForm(propId = null) {
       parqueaderos: parseInt(getEl('fpark').value)||0,
       habitaciones, banos,
       fotos,
+      descripcion: getEl('fdesc')?.value?.trim()||null,
       video:       getEl('fvideo')?.value?.trim()||null,
       tourUrl:     tourUrl||null,
       tourVirtual: !!tourUrl,
@@ -687,10 +899,12 @@ export async function openPagoForm(pagoId = null) {
     <div class="modal-box" style="max-width:450px">
       <div class="mh"><div><div class="mh-title">${p ? '✏️ Editar pago' : 'Registrar pago'}</div></div><button class="btn-mx" id="pgx">✕</button></div>
       <div style="padding:24px 28px;display:flex;flex-direction:column;gap:16px">
-        <div class="mf"><label>Inquilino (nombre o email) *</label><input id="pgi" placeholder="Ej: Valentina Torres o inquilino@demo.co" value="${sanitize(p?.inq?.email ?? '')}"/></div>
+        <div class="mf"><label>Inquilino (nombre o email) <span style="font-weight:400;color:var(--t3)">— opcional</span></label><input id="pgi" placeholder="Vacío = pago directo / general" value="${sanitize(p?.inq?.email ?? '')}"/></div>
         <div class="mf"><label>Propiedad *</label><select id="pgp"><option value="">Selecciona…</option>${propOptions(myProps, p?.propId)}</select></div>
+        <div class="mf"><label>Concepto <span style="font-weight:400;color:var(--t3)">— opcional</span></label><input id="pgcon" maxlength="80" list="pg-conceptos" placeholder="Ej: Canon de arriendo, Administración, Depósito" value="${sanitize(p?.concepto ?? '')}"/>
+          <datalist id="pg-conceptos"><option value="Canon de arriendo"><option value="Administración"><option value="Depósito"><option value="Servicios públicos"><option value="Reparaciones"></datalist></div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
-          <div class="mf"><label>Monto (COP) *</label><input id="pgm" type="number" min="1" placeholder="1800000" value="${p?.monto ?? ''}"/></div>
+          <div class="mf"><label>Monto (COP) *</label><input id="pgm" inputmode="numeric" autocomplete="off" placeholder="1.800.000" value="${p?.monto ? formatNum(p.monto) : ''}"/></div>
           <div class="mf"><label>Fecha *</label><input id="pgf" type="date" value="${sanitize(p?.fecha ?? today())}"/></div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
@@ -708,19 +922,29 @@ export async function openPagoForm(pagoId = null) {
 
   const close = () => ov.remove();
   getEl('pgx').onclick = close; getEl('pgc').onclick = close;
+  bindMoneyInput(getEl('pgm'));
   getEl('pgok').onclick = async () => {
     const dto = {
       inquilino: getEl('pgi').value.trim(),
       propId:    getEl('pgp').value,
-      monto:     parseInt(getEl('pgm').value),
+      monto:     parseCOP(getEl('pgm').value),
       fecha:     getEl('pgf').value,
       estado:    getEl('pge').value,
       metodo:    getEl('pgmet').value,
+      concepto:  getEl('pgcon').value.trim(),
     };
-    // Al editar, no se reasigna el inquilino si no se cambió
-    if (p && (!dto.inquilino || dto.inquilino === (p.inq?.email ?? ''))) delete dto.inquilino;
-    if ((!p && !dto.inquilino) || !dto.propId || !dto.monto || !dto.fecha) return showToast('Completa todos los campos','warning');
-    if (dto.monto < 1) return showToast('El monto debe ser mayor a 0','warning');
+    if (p) {
+      // Al editar: sin cambios no se reasigna; vacío desvincula al inquilino
+      if (dto.inquilino === (p.inq?.email ?? '')) delete dto.inquilino;
+      else if (!dto.inquilino) dto.inquilino = null;
+      if (!dto.concepto) dto.concepto = p.concepto ? null : undefined;
+    } else {
+      if (!dto.inquilino) delete dto.inquilino;
+      if (!dto.concepto)  delete dto.concepto;
+    }
+    if (!dto.propId) return showToast('Selecciona la propiedad','warning');
+    if (!Number.isFinite(dto.monto) || dto.monto < 1) return showToast('Ingresa un monto válido mayor a $0','warning');
+    if (!dto.fecha) return showToast('Selecciona la fecha','warning');
     try {
       await withLoading(getEl('pgok'), () => p ? updatePago(p.id, dto) : addPago(dto));
       close(); showToast(p ? 'Pago actualizado ✓' : 'Pago registrado ✓','success'); await refreshView();

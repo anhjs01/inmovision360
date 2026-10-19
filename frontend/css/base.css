@@ -73,8 +73,22 @@ input, select, textarea {
 }
 
 /* ── Scrollbar personalizada ────────────────────────────────── */
-::-webkit-scrollbar { width: 4px; }
-::-webkit-scrollbar-thumb { background: var(--bo); border-radius: 99px; }
+/* Más ancha y con contraste para poder arrastrarla con facilidad */
+/* Firefox (en Chrome/Edge scrollbar-color anularía los estilos ::-webkit-scrollbar) */
+@supports not selector(::-webkit-scrollbar) {
+  * { scrollbar-width: auto; scrollbar-color: #9aa5b8 #eef0f4; }
+}
+::-webkit-scrollbar { width: 12px; height: 12px; }
+::-webkit-scrollbar-track { background: #eef0f4; border-radius: 99px; }
+::-webkit-scrollbar-thumb {
+  background: #9aa5b8;
+  border-radius: 99px;
+  border: 3px solid #eef0f4;   /* margen visual alrededor del pulgar */
+  min-height: 40px;
+}
+::-webkit-scrollbar-thumb:hover  { background: #6b7a93; }
+::-webkit-scrollbar-thumb:active { background: var(--pr); }
+::-webkit-scrollbar-corner { background: transparent; }
 
 /* ── Utilidad ───────────────────────────────────────────────── */
 .hidden { display: none !important; }

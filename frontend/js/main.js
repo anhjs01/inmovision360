@@ -12,10 +12,11 @@ import { showToast, showView, updateBadges, saveConfig,
 import { openSoftGate, openDetail, openWompi, openPropertyForm,
          confirmDeleteProp, openVisitaForm, toggleVisitaEstado, confirmDeleteVisita,
          openSolicitarVisita, cancelarVisita, openLeadForm, confirmDeleteLead,
-         openPagoForm, confirmDeletePago }   from './modules/modals.js';
+         openPagoForm, confirmDeletePago, openPlanCheckout, confirmCancelPlan,
+         pagarPago, openTourViewer, openPlanoCheckout }   from './modules/modals.js';
 import { State, toggleFav, isFav, getAllProps,
          markPagoAsPaid, loadMe, loadFavs } from './modules/store.js';
-import { getEl, sanitize, formatCOP, CITY_LABELS, AMENITY_LABELS } from './utils.js';
+import { getEl, sanitize, formatCOP, formatNum, CITY_LABELS, AMENITY_LABELS } from './utils.js';
 import { mediaUrl } from './api.js';
 
 // ── Puentes globales (window.__fn) ────────────────────────────
@@ -37,6 +38,11 @@ window.__markPago        = async (id) => {
   else showToast('No se pudo actualizar el pago','error');
 };
 window.__openWompi       = openWompi;
+window.__openPlan        = openPlanCheckout;
+window.__openPlano       = openPlanoCheckout;
+window.__cancelPlan      = confirmCancelPlan;
+window.__pagarPago       = pagarPago;
+window.__openTour        = openTourViewer;
 window.__toast           = showToast;
 window.__logout          = handleLogout;
 window.__saveConfig      = saveConfig;
@@ -68,6 +74,7 @@ window.__toggleFavBtn = async (propId, btn) => {
 const cardSlide = {};
 let pubFilter   = { tipo:'', ciudad:'', q:'', tourOnly:false };
 let pubSort     = 'default';
+let pubSeq      = 0;
 
 function renderPublicCard(p) {
   const photos = (p.fotos ?? []).map(mediaUrl);
@@ -103,7 +110,7 @@ function renderPublicCard(p) {
         <div class="pc-specs">
           <span>🛏️ <strong>${p.habitaciones}</strong></span>
           <span>🚿 <strong>${p.banos}</strong></span>
-          <span>📐 <strong>${p.metros}</strong> m²</span>
+          <span>📐 <strong>${formatNum(p.metros)}</strong> m²</span>
         </div>
         <div class="pc-ams">
           ${(p.comodidades??[]).slice(0,3).map(a=>`<span class="pc-am">${AMENITY_LABELS[a]??a}</span>`).join('')}
@@ -112,7 +119,7 @@ function renderPublicCard(p) {
         </div>
       </div>
       <div class="pc-price-row">
-        <div><span class="pc-price">${formatCOP(p.precio)}</span><span class="pc-price-u"> COP/mes</span></div>
+        <div><span class="pc-price">${formatCOP(p.precio)}</span><span class="pc-price-u"> ${p.listing === 'sale' ? 'COP' : 'COP/mes'}</span></div>
         <button class="btn-ver" onclick="window.__openPubDetail('${p.id}')">Ver detalles</button>
       </div>
     </div>`;
@@ -132,10 +139,18 @@ async function renderPublicCatalog() {
   if (pubFilter.tourOnly) params.tour_virtual  = 'true';
   if (pubSort !== 'default') params.sort       = pubSort;
 
-  const { data: props, meta } = await getAllProps(params);
+  const seq = ++pubSeq;
+  const { data: props, meta, error } = await getAllProps(params);
+  if (seq !== pubSeq) return;   // llegó una búsqueda más reciente
   Object.keys(cardSlide).forEach(k => delete cardSlide[k]);
+  if (error) {
+    if (countEl) countEl.textContent = '';
+    grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:60px;color:var(--t3)"><div style="font-size:48px;margin-bottom:12px">⚠️</div><h3 style="font-size:20px;font-weight:700;color:var(--t1);margin-bottom:8px">No se pudieron cargar las propiedades</h3><p>${sanitize(error)}</p></div>`;
+    return;
+  }
 
-  if (countEl) countEl.textContent = `${meta?.total ?? props.length} propiedad${props.length!==1?'es':''} disponibles`;
+  const total = meta?.total ?? props.length;
+  if (countEl) countEl.textContent = `${formatNum(total)} propiedad${total!==1?'es':''} disponibles`;
   grid.innerHTML = props.length
     ? props.map(renderPublicCard).join('')
     : `<div style="grid-column:1/-1;text-align:center;padding:60px;color:var(--t3)"><div style="font-size:48px;margin-bottom:12px">🔍</div><h3 style="font-size:20px;font-weight:700;color:var(--t1);margin-bottom:8px">Sin resultados</h3><p>Ajusta los filtros</p></div>`;

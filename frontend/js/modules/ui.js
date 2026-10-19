@@ -5,9 +5,9 @@
 
 import { State, getMyProps, getAllProps, getMyVisitas, getMyPagos,
          getKPIs, getLeads, getMensajes, getUnreadCount, updateLead,
-         getFavProps, isFav } from './store.js';
-import { MensajesApi, EstadisticasApi, UsuariosApi, SuscripcionesApi, VisitasApi, mediaUrl } from '../api.js';
-import { formatCOP, formatShort, sanitize, capitalize, getEl,
+         getFavProps, isFav, getPlanes, getMiPlan } from './store.js';
+import { MensajesApi, EstadisticasApi, UsuariosApi, VisitasApi, mediaUrl } from '../api.js';
+import { formatCOP, formatShort, formatNum, formatFecha, sanitize, capitalize, getEl,
          CITY_LABELS, AMENITY_LABELS, LISTING_LABELS, PLAN_COLORS } from '../utils.js';
 
 let currentView = '';
@@ -15,7 +15,7 @@ let selectedMsg  = null;
 
 const RBAC = {
   arrendador: ['panel','catalogo','mis-props','visitas','mensajes','crm','estadisticas','pagos','suscripcion','configuracion'],
-  inquilino:  ['catalogo','favoritos','mis-visitas','mis-pagos','mensajes','configuracion'],
+  inquilino:  ['catalogo','favoritos','mis-visitas','mis-pagos','mensajes','suscripcion','configuracion'],
 };
 
 const NAV_ARRENDADOR = [
@@ -28,7 +28,7 @@ const NAV_ARRENDADOR = [
 const NAV_INQUILINO = [
   { sec:'Explorar',      items:[{v:'catalogo',ico:'🏘️',lbl:'Explorar'},{v:'favoritos',ico:'❤️',lbl:'Favoritos',badge:'nb-fav'}] },
   { sec:'Mis Arriendos', items:[{v:'mis-visitas',ico:'📅',lbl:'Mis Visitas'},{v:'mis-pagos',ico:'💳',lbl:'Mis Pagos'},{v:'mensajes',ico:'💬',lbl:'Mensajes',badge:'nb-m'}] },
-  { sec:'Cuenta',        items:[{v:'configuracion',ico:'⚙️',lbl:'Configuración'}] },
+  { sec:'Cuenta',        items:[{v:'suscripcion',ico:'⭐',lbl:'Planes'},{v:'configuracion',ico:'⚙️',lbl:'Configuración'}] },
 ];
 
 // ── Toast ──────────────────────────────────────────────────────
@@ -86,7 +86,7 @@ export function updateSidebarProfile() {
   const avEl = getEl('sp-av'); const nmEl = getEl('sp-name'); const rlEl = getEl('sp-role');
   if (avEl) avEl.textContent = ini;
   if (nmEl) nmEl.textContent = (user.nombre + ' ' + (user.apellido ?? '')).trim();
-  if (rlEl) rlEl.textContent = user.rol === 'arrendador' ? 'Arrendador · ' + capitalize(user.plan ?? 'free') : 'Inquilino';
+  if (rlEl) rlEl.textContent = (user.rol === 'arrendador' ? 'Arrendador' : 'Inquilino') + ' · ' + capitalize(user.plan ?? 'free');
 }
 
 export async function showView(name) {
@@ -165,38 +165,59 @@ function emptyState(ico, title, msg, action) {
     action + '</div>';
 }
 
+// Venta se muestra sin "/mes"
+export function priceUnit(listing) { return listing === 'sale' ? 'COP' : 'COP/mes'; }
+
 function buildPropertyCard(p, mode) {
   mode = mode || 'public';
+  const id        = sanitize(p.id);
   const mainPhoto = (p.fotos && p.fotos.length) ? mediaUrl(p.fotos[0]) : '';
+  const nFotos    = (p.fotos || []).length;
   const tags = (p.comodidades || []).slice(0,3).map(function(a) {
-    return '<span class="pc-tg">' + (AMENITY_LABELS[a] || a) + '</span>';
-  }).join('');
+    return '<span class="pc-tg">' + sanitize(AMENITY_LABELS[a] || a) + '</span>';
+  }).join('') + ((p.comodidades || []).length > 3 ? '<span class="pc-tg pc-tg-more">+' + ((p.comodidades || []).length - 3) + '</span>' : '');
 
   const imgHtml = mainPhoto
-    ? '<img src="' + sanitize(mainPhoto) + '" loading="lazy" style="width:100%;height:100%;object-fit:cover">'
-    : '<div style="display:grid;place-items:center;height:100%;font-size:36px;background:#e8edf7">🏠</div>';
+    ? '<img src="' + sanitize(mainPhoto) + '" loading="lazy" alt="' + sanitize(p.titulo) + '" onerror="this.replaceWith(Object.assign(document.createElement(\'div\'),{className:\'pc-noimg\',textContent:\'🏠\'}))">'
+    : '<div class="pc-noimg">🏠</div>';
 
   const actions = mode === 'owner'
-    ? '<button style="flex:1;padding:8px;border-radius:9px;font-size:13px;font-weight:600;background:#eff3fb;color:var(--pr);border:1.5px solid #d0d9f0;cursor:pointer;font-family:var(--f)" onclick="event.stopPropagation();window.__openForm(\'' + p.id + '\')">✏️ Editar</button>' +
-      '<button class="btn-d" onclick="event.stopPropagation();window.__confirmDel(\'' + p.id + '\')">🗑️</button>'
-    : '<button style="padding:8px 12px;border-radius:9px;font-size:14px;background:#fff8ed;border:1.5px solid #fed7aa;cursor:pointer;font-family:var(--f)" onclick="event.stopPropagation();window.__toggleFavBtn(\'' + p.id + '\',this)">' + (isFav(p.id) ? '❤️' : '🤍') + '</button>' +
-      '<button class="btn-a" style="flex:1;padding:8px;border-radius:9px;font-size:13px" onclick="event.stopPropagation();window.__openDetail(\'' + p.id + '\')">Ver detalles</button>';
+    ? '<button class="pc-btn pc-btn-soft" onclick="event.stopPropagation();window.__openForm(\'' + id + '\')">✏️ Editar</button>' +
+      '<button class="pc-btn pc-btn-del" title="Eliminar" onclick="event.stopPropagation();window.__confirmDel(\'' + id + '\')">🗑️</button>'
+    : '<button class="pc-btn pc-btn-main" onclick="event.stopPropagation();window.__openDetail(\'' + id + '\')">Ver detalles</button>';
 
-  return '<article class="prop-card" onclick="window.__openDetail(\'' + p.id + '\')">' +
+  const fav = mode === 'owner' ? '' :
+    '<button class="pc-fav-d" title="Guardar en favoritos" onclick="event.stopPropagation();window.__toggleFavBtn(\'' + id + '\',this)">' + (isFav(p.id) ? '❤️' : '🤍') + '</button>';
+
+  const tour = p.tourVirtual && p.tourUrl
+    ? '<button class="pc-tour-d" title="Ver tour virtual" onclick="event.stopPropagation();window.__openTour(\'' + id + '\')">🥽 ' + sanitize(p.tourTipo || 'Tour 360°') + ' <span>▶</span></button>'
+    : '';
+
+  return '<article class="prop-card" onclick="window.__openDetail(\'' + id + '\')">' +
     '<div class="pc-img-d">' + imgHtml +
-      '<span class="pc-type-d">' + sanitize(p.tipo) + '</span><span class="pc-dot-d"></span>' +
-      (p.tourVirtual ? '<span style="position:absolute;top:9px;left:9px;padding:4px 10px;border-radius:99px;font-size:10px;font-weight:700;background:rgba(15,157,88,.92);color:#fff">🥽 ' + sanitize(p.tourTipo || 'Tour') + '</span>' : '') +
+      '<div class="pc-img-shade"></div>' +
+      '<div class="pc-top-d">' +
+        '<span class="pc-type-d">' + sanitize(p.tipo) + '</span>' +
+        (p.destacado ? '<span class="pc-feat-d">⭐ Destacado</span>' : '') +
+      '</div>' +
+      fav + tour +
+      (nFotos > 1 ? '<span class="pc-nfotos-d">📷 ' + nFotos + '</span>' : '') +
+      '<div class="pc-price-d">' + formatCOP(p.precio) + '<small> ' + priceUnit(p.listing) + '</small></div>' +
     '</div>' +
     '<div class="pc-bd">' +
-      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">' +
-        (p.estrato ? '<span class="strato-badge">Estrato ' + p.estrato + '</span>' : '<span></span>') +
-        '<span style="font-size:11px;color:var(--t3)">' + sanitize(p.barrio || '') + '</span>' +
+      '<div class="pc-meta-d">' +
+        (p.listing ? '<span class="pc-listing-d">' + sanitize(LISTING_LABELS[p.listing] || p.listing) + '</span>' : '') +
+        (p.estrato ? '<span class="strato-badge">Estrato ' + sanitize(p.estrato) + '</span>' : '') +
       '</div>' +
-      '<div class="pc-tit">' + sanitize(p.titulo) + '</div>' +
-      '<div class="pc-lc">📍 ' + sanitize(CITY_LABELS[p.ciudad] || p.ciudad) + '</div>' +
-      '<div class="pc-st"><span>🛏️ <strong>' + p.habitaciones + '</strong></span><span>🚿 <strong>' + p.banos + '</strong></span><span>📐 <strong>' + p.metros + '</strong> m²</span></div>' +
-      '<div class="pc-tgs">' + tags + '</div>' +
-      '<div class="pc-pr">' + formatCOP(p.precio) + '<span class="pc-pr-u"> COP/mes</span></div>' +
+      '<div class="pc-tit" title="' + sanitize(p.titulo) + '">' + sanitize(p.titulo) + '</div>' +
+      '<div class="pc-lc">📍 ' + sanitize(CITY_LABELS[p.ciudad] || p.ciudad) + (p.barrio ? ' · ' + sanitize(p.barrio) : '') + '</div>' +
+      '<div class="pc-st">' +
+        '<span title="Habitaciones">🛏️ <strong>' + formatNum(p.habitaciones) + '</strong> hab.</span>' +
+        '<span title="Baños">🚿 <strong>' + formatNum(p.banos) + '</strong> baños</span>' +
+        '<span title="Área">📐 <strong>' + formatNum(p.metros) + '</strong> m²</span>' +
+        (p.metros ? '<span class="pc-m2-d" title="Precio por m²">' + formatShort(p.precio / p.metros) + '/m²</span>' : '') +
+      '</div>' +
+      (tags ? '<div class="pc-tgs">' + tags + '</div>' : '') +
     '</div>' +
     '<div class="pc-acts">' + actions + '</div>' +
   '</article>';
@@ -241,21 +262,71 @@ async function renderMisProps(el) {
 
 // ── Catálogo ───────────────────────────────────────────────────
 async function renderCatalogo(el) {
-  var filters = {};
+  var filters  = {};
   var tourOnly = false;
+  var page     = 1;
+  var reqSeq   = 0;   // descarta respuestas viejas si el usuario cambia de filtro antes de que lleguen
+  var qTimer   = null;
 
-  async function reloadCatalog() {
+  // append=true agrega la siguiente página ("Cargar más"); si no, reinicia la lista
+  async function reloadCatalog(append) {
     var grid = getEl('cat-grid');
     if (!grid) return;
-    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--t3)">⏳ Cargando…</div>';
-    var result = await getAllProps(filters);
-    var data   = result.data || [];
-    grid.innerHTML = data.length
-      ? data.map(function(p) { return buildPropertyCard(p,'public'); }).join('')
-      : emptyState('🔍','Sin resultados','Ajusta los filtros');
+    var seq = ++reqSeq;
+    page = append ? page + 1 : 1;
+    var more = getEl('cat-more');
+    if (append && more) { more.disabled = true; more.textContent = '⏳ Cargando…'; }
+    if (!append) grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--t3)">⏳ Cargando…</div>';
+
+    var params = Object.assign({}, filters, { page: page });
+    var result;
+    try { result = await getAllProps(params); }
+    catch (e) { result = { data: [], meta: {}, error: 'Error de conexión con el servidor' }; }
+    // La vista cambió o llegó una petición más nueva: no tocar el DOM
+    if (seq !== reqSeq || !document.body.contains(grid)) return;
+
+    var data  = result.data || [];
+    var total = (result.meta && result.meta.total != null) ? result.meta.total : data.length;
+    var pages = (result.meta && result.meta.pages) || 1;
+
+    if (result.error) {
+      if (append) page--;
+      if (!append) grid.innerHTML = emptyState('⚠️','No se pudo cargar el catálogo', sanitize(result.error),
+        '<button class="btn-a" style="margin-top:8px" onclick="window.__reloadCatalog && window.__reloadCatalog()">Reintentar</button>');
+      else showToast(result.error, 'error');
+    } else if (append) {
+      grid.insertAdjacentHTML('beforeend', data.map(function(p) { return buildPropertyCard(p,'public'); }).join(''));
+    } else {
+      grid.innerHTML = data.length
+        ? data.map(function(p) { return buildPropertyCard(p,'public'); }).join('')
+        : emptyState('🔍','Sin resultados','Ajusta o limpia los filtros para ver más propiedades.',
+            hasFilters() ? '<button class="btn-g" style="margin-top:8px" onclick="window.__clearCatFilters()">Limpiar filtros</button>' : '');
+    }
+
     var sub = el.querySelector('.pg-sub');
-    if (sub) sub.textContent = data.length + ' propiedades';
+    if (sub && !result.error) sub.textContent = formatNum(total) + ' propiedad' + (total === 1 ? '' : 'es');
+    if (more) {
+      more.style.display = (!result.error || append) && page < pages ? '' : 'none';
+      more.disabled = false; more.textContent = 'Cargar más';
+    }
+    var clr = getEl('cat-clear');
+    if (clr) clr.style.display = hasFilters() ? '' : 'none';
   }
+
+  function hasFilters() {
+    return !!(filters.tipo || filters.ciudad || filters.q || filters.tour_virtual || (filters.sort && filters.sort !== 'default'));
+  }
+
+  window.__reloadCatalog = function() { reloadCatalog(false); };
+  window.__clearCatFilters = function() {
+    filters = {}; tourOnly = false;
+    el.querySelectorAll('[data-ct]').forEach(function(x) { x.classList.toggle('active', x.dataset.ct === 'all'); });
+    var q = getEl('cat-q'); if (q) q.value = '';
+    var s = getEl('cat-sort'); if (s) s.value = 'default';
+    var c = getEl('cat-city'); if (c) c.value = '';
+    var t = getEl('tour-chip-d'); if (t) t.classList.remove('active');
+    reloadCatalog(false);
+  };
 
   const user = State.session;
   el.innerHTML =
@@ -274,36 +345,52 @@ async function renderCatalogo(el) {
         Object.entries(CITY_LABELS).map(function(entry) { return '<option value="' + entry[0] + '">' + entry[1] + '</option>'; }).join('') +
       '</select>' +
       '<button class="fb-chip" id="tour-chip-d">🥽 Solo Tour 3D</button>' +
+      '<button class="fb-chip fb-clear" id="cat-clear" style="display:none" onclick="window.__clearCatFilters()">✕ Limpiar</button>' +
     '</div>' +
-    '<div class="prop-grid-d" id="cat-grid"><div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--t3)">⏳ Cargando…</div></div>';
+    '<div class="prop-grid-d" id="cat-grid"><div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--t3)">⏳ Cargando…</div></div>' +
+    '<div style="display:flex;justify-content:center;padding:0 28px 36px"><button class="btn-g" id="cat-more" style="display:none;min-width:200px">Cargar más</button></div>';
 
-  await reloadCatalog();
-
+  // Listeners antes de la primera carga: así un clic temprano no se pierde
   el.querySelectorAll('[data-ct]').forEach(function(b) {
     b.addEventListener('click', function() {
-      filters.tipo = b.dataset.ct === 'all' ? undefined : b.dataset.ct;
-      el.querySelectorAll('[data-ct]').forEach(function(x) { x.classList.remove('active'); });
-      b.classList.add('active');
-      reloadCatalog();
+      if (b.dataset.ct === 'all') delete filters.tipo; else filters.tipo = b.dataset.ct;
+      el.querySelectorAll('[data-ct]').forEach(function(x) { x.classList.toggle('active', x === b); });
+      reloadCatalog(false);
     });
   });
 
   var qInput = getEl('cat-q');
-  if (qInput) qInput.addEventListener('input', function(e) { filters.q = e.target.value; reloadCatalog(); });
+  if (qInput) qInput.addEventListener('input', function(e) {
+    var v = e.target.value.trim();
+    if (v) filters.q = v; else delete filters.q;
+    clearTimeout(qTimer);
+    qTimer = setTimeout(function() { reloadCatalog(false); }, 300);   // evita una petición por tecla
+  });
 
   var sortSel = getEl('cat-sort');
-  if (sortSel) sortSel.addEventListener('change', function(e) { filters.sort = e.target.value; reloadCatalog(); });
+  if (sortSel) sortSel.addEventListener('change', function(e) {
+    if (e.target.value && e.target.value !== 'default') filters.sort = e.target.value; else delete filters.sort;
+    reloadCatalog(false);
+  });
 
   var citySel = getEl('cat-city');
-  if (citySel) citySel.addEventListener('change', function(e) { filters.ciudad = e.target.value || undefined; reloadCatalog(); });
+  if (citySel) citySel.addEventListener('change', function(e) {
+    if (e.target.value) filters.ciudad = e.target.value; else delete filters.ciudad;
+    reloadCatalog(false);
+  });
 
   var tourChip = getEl('tour-chip-d');
   if (tourChip) tourChip.addEventListener('click', function() {
     tourOnly = !tourOnly;
-    filters.tour_virtual = tourOnly ? 'true' : undefined;
+    if (tourOnly) filters.tour_virtual = 'true'; else delete filters.tour_virtual;
     tourChip.classList.toggle('active', tourOnly);
-    reloadCatalog();
+    reloadCatalog(false);
   });
+
+  var moreBtn = getEl('cat-more');
+  if (moreBtn) moreBtn.addEventListener('click', function() { reloadCatalog(true); });
+
+  await reloadCatalog(false);
 }
 
 // ── Visitas ────────────────────────────────────────────────────
@@ -583,23 +670,56 @@ async function renderEstadisticas(el) {
   renderBar('chart-city', cityRes && cityRes.data);
 }
 
-// ── Pagos ──────────────────────────────────────────────────────
-async function renderPagos(el) {
-  const pagos = await getMyPagos();
-  var pagados   = pagos.filter(function(p){return p.estado==='pagado';}).reduce(function(s,p){return s+p.monto;},0);
-  var pendiente = pagos.filter(function(p){return p.estado==='pendiente';}).reduce(function(s,p){return s+p.monto;},0);
-  var vencidos  = pagos.filter(function(p){return p.estado==='vencido';}).reduce(function(s,p){return s+p.monto;},0);
+// ── Pagos (arrendador e inquilino) + Planes ────────────────────
+// Pestaña activa dentro del módulo de pagos: 'pagos' | 'planes'
+var pagosTab    = 'pagos';
+var pagosFiltro = '';
 
-  var cols = '1fr 1.2fr .9fr .7fr .6fr 1.5fr';
-  var rows = pagos.map(function(p, i) {
-    var propTitulo  = (p.inquilino && p.inquilino.titulo) ? p.inquilino.titulo : '—';
-    var inqNombre   = (p.inq && p.inq.nombre) ? (p.inq.nombre + ' ' + (p.inq.apellido||'')) : '—';
+function pagosTabsHtml() {
+  return '<div class="view-tabs">' +
+    '<button class="vt' + (pagosTab === 'pagos'  ? ' active' : '') + '" onclick="window.__pagosTab(\'pagos\')">💳 Pagos</button>' +
+    '<button class="vt' + (pagosTab === 'planes' ? ' active' : '') + '" onclick="window.__pagosTab(\'planes\')">⭐ Planes y suscripción</button>' +
+  '</div>';
+}
+
+window.__pagosTab = function(tab) { pagosTab = tab; refreshView(); };
+window.__pagosFiltro = function(estado) { pagosFiltro = estado; refreshView(); };
+
+function pagoConcepto(p) {
+  return p.concepto ? '<div style="font-size:11px;color:var(--t3);margin-top:2px">' + sanitize(p.concepto) + '</div>' : '';
+}
+
+function pagoInquilino(p) {
+  if (p.inq && p.inq.nombre) return '<span style="font-size:13px;font-weight:600">' + sanitize((p.inq.nombre + ' ' + (p.inq.apellido || '')).trim()) + '</span>';
+  return '<span class="badge b-i" title="Pago sin inquilino asociado">Pago directo</span>';
+}
+
+function filtroChips(pagos) {
+  var opts = [['', 'Todos'], ['pagado', 'Pagados'], ['pendiente', 'Pendientes'], ['vencido', 'Vencidos']];
+  return '<div class="filter-bar-d" style="padding-top:18px">' + opts.map(function(o) {
+    var n = o[0] ? pagos.filter(function(p) { return p.estado === o[0]; }).length : pagos.length;
+    return '<button class="fb-chip' + (pagosFiltro === o[0] ? ' active' : '') + '" onclick="window.__pagosFiltro(\'' + o[0] + '\')">' + o[1] + ' <span style="opacity:.7">(' + formatNum(n) + ')</span></button>';
+  }).join('') + '</div>';
+}
+
+function sumMonto(pagos, estado) {
+  return pagos.filter(function(p) { return p.estado === estado; }).reduce(function(s, p) { return s + p.monto; }, 0);
+}
+
+async function renderPagos(el) {
+  if (pagosTab === 'planes') return renderPlanesTab(el, 'Pagos & Finanzas');
+  const pagos = await getMyPagos();
+  var visibles = pagosFiltro ? pagos.filter(function(p) { return p.estado === pagosFiltro; }) : pagos;
+
+  var cols = '1.1fr 1.3fr .9fr .75fr .6fr 1.5fr';
+  var rows = visibles.map(function(p, i) {
+    var propTitulo = (p.inquilino && p.inquilino.titulo) ? p.inquilino.titulo : '—';
     return '<div class="t-row" style="grid-template-columns:' + cols + ';background:' + (i%2?'#f9fafb':'#fff') + '">' +
-      '<span style="font-size:13px;font-weight:600">' + sanitize(inqNombre) + '</span>' +
-      '<span style="font-size:12px;color:var(--t2)">' + sanitize(propTitulo) + '</span>' +
+      '<div>' + pagoInquilino(p) + '</div>' +
+      '<div><span style="font-size:12px;color:var(--t2)">' + sanitize(propTitulo) + '</span>' + pagoConcepto(p) + '</div>' +
       '<span style="font-size:15px;font-weight:800;color:var(--pr)">' + formatCOP(p.monto) + '</span>' +
-      '<span style="font-size:12px;color:var(--t2)">' + sanitize(p.fecha) + '</span>' +
-      '<span style="font-size:11px;padding:2px 8px;border-radius:99px;background:#f3f4f6;color:var(--t2)">' + sanitize(p.metodo||'—') + '</span>' +
+      '<span style="font-size:12px;color:var(--t2)">' + sanitize(formatFecha(p.fecha)) + '</span>' +
+      '<span style="font-size:11px;padding:2px 8px;border-radius:99px;background:#f3f4f6;color:var(--t2);justify-self:start">' + sanitize(p.metodo||'—') + '</span>' +
       '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">' +
         estadoBadge(p.estado) +
         (p.estado !== 'pagado' ? rowBtn('✓ Pagado', 'window.__markPago(\'' + p.id + '\')', 'ok') : '') +
@@ -610,50 +730,172 @@ async function renderPagos(el) {
   }).join('');
 
   el.innerHTML =
-    '<div class="topbar"><div><h1 class="pg-title">Pagos & Finanzas</h1></div>' +
-    '<button class="btn-a" onclick="window.__openPagoForm()">+ Registrar</button></div>' +
+    '<div class="topbar"><div><h1 class="pg-title">Pagos & Finanzas</h1><p class="pg-sub">' + formatNum(pagos.length) + ' registro' + (pagos.length === 1 ? '' : 's') + '</p></div>' +
+    '<button class="btn-a" onclick="window.__openPagoForm()">+ Registrar pago</button></div>' +
+    pagosTabsHtml() +
     '<div class="kpi-grid">' +
-      kpiCard('💰','#f0fdf4','Cobrado', formatShort(pagados), 'COP') +
-      kpiCard('⏳','#fefce8','Por cobrar', formatShort(pendiente), 'COP') +
-      kpiCard('🔴','#fff1f2','Vencidos', formatShort(vencidos), 'COP') +
-      kpiCard('📊','#eff3fb','Total', pagos.length) +
+      kpiCard('💰','#f0fdf4','Cobrado', formatShort(sumMonto(pagos,'pagado')), 'COP') +
+      kpiCard('⏳','#fefce8','Por cobrar', formatShort(sumMonto(pagos,'pendiente')), 'COP') +
+      kpiCard('🔴','#fff1f2','Vencidos', formatShort(sumMonto(pagos,'vencido')), 'COP') +
+      kpiCard('📊','#eff3fb','Total', formatNum(pagos.length)) +
     '</div>' +
-    '<div class="tbl-wrap" style="margin-top:20px">' +
+    filtroChips(pagos) +
+    '<div class="tbl-wrap tbl-scroll">' +
       '<div class="t-head" style="grid-template-columns:' + cols + '">' +
-        '<span>Inquilino</span><span>Propiedad</span><span>Monto</span><span>Fecha</span><span>Método</span><span>Estado / Acciones</span>' +
+        '<span>Inquilino</span><span>Propiedad / Concepto</span><span>Monto</span><span>Fecha</span><span>Método</span><span>Estado / Acciones</span>' +
       '</div>' +
-      '<div id="pgb">' + (rows || '<div style="padding:30px;text-align:center;color:var(--t3)">Sin pagos</div>') + '</div>' +
+      '<div id="pgb">' + (rows || '<div style="padding:30px;text-align:center;color:var(--t3)">' + (pagos.length ? 'No hay pagos con este estado' : 'Sin pagos registrados') + '</div>') + '</div>' +
     '</div>';
 }
 
-// ── Suscripción ────────────────────────────────────────────────
-async function renderSuscripcion(el) {
-  var res    = await SuscripcionesApi.planes();
-  var planes = (res && res.ok) ? res.data : [];
-  var user   = State.session;
+// ── Mis Pagos (inquilino) ──────────────────────────────────────
+async function renderMisPagos(el) {
+  if (pagosTab === 'planes') return renderPlanesTab(el, 'Mis Pagos');
+  const pagos = await getMyPagos();
+  var visibles = pagosFiltro ? pagos.filter(function(p) { return p.estado === pagosFiltro; }) : pagos;
+  var cols = '1.5fr 1fr .8fr 1.3fr';
 
-  var cards = planes.map(function(p) {
-    var isCurrent = user.plan === p.id;
-    var color     = PLAN_COLORS[p.id] || '#94a3b8';
-    return '<div class="plan-card' + (isCurrent ? ' rec' : '') + '">' +
-      (isCurrent ? '<span style="font-size:10.5px;font-weight:700;color:var(--ac)">✓ Tu plan actual</span>' : '') +
-      '<div style="font-size:18px;font-weight:800;color:' + color + '">' + sanitize(p.nombre) + '</div>' +
-      '<div style="font-size:28px;font-weight:800;color:var(--pr)">' + (p.precio === 0 ? 'Gratis' : formatCOP(p.precio)) + '<span style="font-size:13px;font-weight:400;color:var(--t3)">' + (p.precio ? '/mes' : '') + '</span></div>' +
-      '<div style="font-size:12px;color:var(--t2)">' + (p.propsMax ? 'Máx. ' + p.propsMax + ' propiedades' : 'Propiedades ilimitadas') + '</div>' +
-      '<button class="' + (isCurrent ? 'btn-g' : 'btn-a') + '" style="margin-top:auto;font-size:13.5px;padding:11px;width:100%" onclick="' +
-        (isCurrent ? 'window.__toast(\'Ya tienes este plan\',\'info\')' : 'window.__openWompi(\'' + p.nombre + '\',\'' + (p.precio === 0 ? 'Gratis' : formatCOP(p.precio)) + '\')') + '">' +
-        (isCurrent ? 'Plan actual' : 'Contratar con Wompi') +
-      '</button>' +
+  var rows = visibles.map(function(p, i) {
+    var propTitulo = (p.inquilino && p.inquilino.titulo) ? p.inquilino.titulo : '—';
+    return '<div class="t-row" style="grid-template-columns:' + cols + ';background:' + (i%2?'#f9fafb':'#fff') + '">' +
+      '<div><span style="font-size:13px;font-weight:600">' + sanitize(propTitulo) + '</span>' + pagoConcepto(p) + '</div>' +
+      '<span style="font-size:15px;font-weight:800;color:var(--pr)">' + formatCOP(p.monto) + '</span>' +
+      '<span style="font-size:12.5px;color:var(--t2)">' + sanitize(formatFecha(p.fecha)) + '</span>' +
+      '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">' +
+        estadoBadge(p.estado) +
+        (p.estado !== 'pagado' ? rowBtn('💳 Pagar', 'window.__pagarPago(\'' + p.id + '\')', 'ok') : '') +
+      '</div>' +
     '</div>';
   }).join('');
 
   el.innerHTML =
-    '<div class="topbar"><div><h1 class="pg-title">Suscripción</h1>' +
-    '<p class="pg-sub">Plan actual: <strong style="color:var(--pr)">' + capitalize(user.plan || 'free') + '</strong></p></div></div>' +
-    '<div style="padding:14px 28px 8px;font-size:13.5px;color:var(--t2)">Pagos seguros con Wompi · PSE · Nequi · Daviplata</div>' +
-    '<div class="plan-grid">' + (cards || '<div style="padding:30px;text-align:center;color:var(--t3)">Sin planes disponibles</div>') + '</div>';
+    '<div class="topbar"><div><h1 class="pg-title">Mis Pagos</h1><p class="pg-sub">Historial de pagos y planes</p></div></div>' +
+    pagosTabsHtml() +
+    '<div class="kpi-grid">' +
+      kpiCard('💰','#f0fdf4','Total pagado', formatShort(sumMonto(pagos,'pagado')), 'COP') +
+      kpiCard('⏳','#fefce8','Por pagar', formatShort(sumMonto(pagos,'pendiente') + sumMonto(pagos,'vencido')), 'COP') +
+      kpiCard('📋','#eff3fb','Transacciones', formatNum(pagos.length)) +
+    '</div>' +
+    filtroChips(pagos) +
+    '<div class="tbl-wrap tbl-scroll">' +
+      '<div class="t-head" style="grid-template-columns:' + cols + '">' +
+        '<span>Propiedad / Concepto</span><span>Monto</span><span>Fecha</span><span>Estado</span>' +
+      '</div>' +
+      (rows || '<div style="padding:30px;text-align:center;color:var(--t3)">' + (pagos.length ? 'No hay pagos con este estado' : 'Aún no tienes pagos') + '</div>') +
+    '</div>';
 }
 
+// ── Planes y suscripción (compartido por Pagos, Mis Pagos y Suscripción) ──
+async function planesHtml() {
+  var res    = await Promise.all([getPlanes(), getMiPlan()]);
+  var planes = res[0];
+  var mi     = res[1];
+  var user   = State.session;
+  var actual = (mi && mi.plan) || user.plan || 'free';
+
+  var suscripciones = planes.filter(function(p) { return (p.categoria || 'suscripcion') === 'suscripcion'; });
+  var planos        = planes.filter(function(p) { return p.categoria === 'plano'; });
+
+  var cards = suscripciones.map(function(p) {
+    var isCurrent = actual === p.id;
+    var color     = PLAN_COLORS[p.id] || '#94a3b8';
+    var precio    = p.precio === 0 ? 'Gratis' : formatCOP(p.precio);
+    return '<div class="plan-card' + (isCurrent ? ' rec' : '') + '" style="--plan:' + color + '">' +
+      (isCurrent ? '<span class="plan-cur">✓ Tu plan actual</span>' : '') +
+      '<div style="font-size:18px;font-weight:800;color:' + color + '">' + sanitize(p.nombre) + '</div>' +
+      '<div style="font-size:28px;font-weight:800;color:var(--pr);letter-spacing:-.5px">' + precio + '<span style="font-size:13px;font-weight:400;color:var(--t3)">' + (p.precio ? ' COP/mes' : '') + '</span></div>' +
+      '<div style="font-size:12.5px;color:var(--t2)">' + (p.propsMax ? 'Hasta ' + formatNum(p.propsMax) + ' propiedades publicadas' : 'Propiedades ilimitadas') + '</div>' +
+      featuresHtml(p.features) +
+      '<button class="' + (isCurrent ? 'btn-g' : 'btn-a') + '" style="margin-top:auto;font-size:13.5px;padding:11px;width:100%;justify-content:center"' +
+        (isCurrent ? ' disabled' : ' onclick="window.__openPlan(\'' + sanitize(p.id) + '\')"') + '>' +
+        (isCurrent ? 'Plan actual' : (p.precio === 0 ? 'Cambiar a ' + sanitize(p.nombre) : 'Contratar con Wompi')) +
+      '</button>' +
+    '</div>';
+  }).join('');
+
+  var resumen = '';
+  if (mi) {
+    var uso = mi.props_max ? Math.min(100, Math.round(mi.props_activas / mi.props_max * 100)) : 0;
+    resumen =
+      '<div class="pay-card plan-resumen">' +
+        '<div><div class="kpi-label">Plan actual</div><div style="font-size:20px;font-weight:800;color:var(--pr)">' + sanitize(mi.nombre) + '</div>' +
+          '<div style="font-size:12px;color:var(--t3)">Estado: ' + sanitize(mi.estado) + (mi.vence ? ' · Vence el ' + sanitize(formatFecha(mi.vence)) : '') + '</div></div>' +
+        (user.rol === 'arrendador'
+          ? '<div style="flex:1;min-width:180px"><div style="font-size:12px;color:var(--t2);margin-bottom:6px">' + formatNum(mi.props_activas) + ' de ' + (mi.props_max ? formatNum(mi.props_max) : '∞') + ' propiedades</div>' +
+              '<div class="plan-bar"><div style="width:' + (mi.props_max ? uso : 8) + '%"></div></div></div>'
+          : '') +
+        (actual !== 'free' ? '<button class="btn-g" onclick="window.__cancelPlan()">Cancelar suscripción</button>' : '') +
+      '</div>';
+  }
+
+  return resumen +
+    '<div style="padding:14px 28px 4px;font-size:13.5px;color:var(--t2)">🔒 Pagos seguros con Wompi · PSE · Nequi · Daviplata · Tarjeta</div>' +
+    '<div class="plan-grid">' + (cards || '<div style="padding:30px;text-align:center;color:var(--t3)">Sin planes disponibles. Ejecuta <code>npm run db:seed</code> en el backend.</div>') + '</div>' +
+    planosHtml(planos);
+}
+
+function featuresHtml(features) {
+  if (!features || !features.length) return '';
+  return '<ul class="plan-feats">' + features.map(function(f) { return '<li>' + sanitize(f) + '</li>'; }).join('') + '</ul>';
+}
+
+// Ofertas de Planos 2D/3D: contratación solo visual (no cambia el plan del usuario)
+function planosHtml(planos) {
+  if (!planos.length) return '<div style="height:32px"></div>';
+  var solicitados = getPlanosSolicitados();
+  var icons = { plano_2d: '📐', plano_3d: '🧊' };
+  return '<div class="planos-sec">' +
+    '<div class="planos-head">' +
+      '<div><h2>Planos 2D y 3D</h2><p>Muestra la distribución de tu inmueble con planos profesionales. Disponible para arrendadores e inquilinos.</p></div>' +
+      '<span class="badge b-i">Pago único</span>' +
+    '</div>' +
+    '<div class="planos-grid">' + planos.map(function(p) {
+      var pedido = solicitados.indexOf(p.id) !== -1;
+      return '<div class="plano-card">' +
+        '<div class="plano-ico">' + (icons[p.id] || '🗺') + '</div>' +
+        '<div class="plano-body">' +
+          '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="plano-name">' + sanitize(p.nombre) + '</span>' +
+            (pedido ? '<span class="badge b-ok">✓ Solicitado</span>' : '') + '</div>' +
+          (p.descripcion ? '<div class="plano-desc">' + sanitize(p.descripcion) + '</div>' : '') +
+          featuresHtml(p.features) +
+        '</div>' +
+        '<div class="plano-buy">' +
+          '<div class="plano-price">' + formatCOP(p.precio) + '<small> COP</small></div>' +
+          '<button class="btn-a" style="justify-content:center;width:100%" onclick="window.__openPlano(\'' + sanitize(p.id) + '\')">' + (pedido ? 'Solicitar otro' : 'Contratar') + '</button>' +
+        '</div>' +
+      '</div>';
+    }).join('') + '</div>' +
+  '</div>';
+}
+
+// Solicitudes de planos guardadas solo en este navegador (es una oferta visual)
+export function getPlanosSolicitados() {
+  try { return JSON.parse(localStorage.getItem('planos_solicitados_' + (State.session ? State.session.id : '')) || '[]'); }
+  catch (e) { return []; }
+}
+export function addPlanoSolicitado(id) {
+  try {
+    var key  = 'planos_solicitados_' + (State.session ? State.session.id : '');
+    var list = getPlanosSolicitados();
+    if (list.indexOf(id) === -1) list.push(id);
+    localStorage.setItem(key, JSON.stringify(list));
+  } catch (e) { /* sin almacenamiento: solo no se recuerda la solicitud */ }
+}
+
+async function renderPlanesTab(el, titulo) {
+  var body = await planesHtml();
+  el.innerHTML =
+    '<div class="topbar"><div><h1 class="pg-title">' + titulo + '</h1><p class="pg-sub">Planes y suscripción</p></div></div>' +
+    pagosTabsHtml() + body;
+}
+
+// ── Suscripción ────────────────────────────────────────────────
+async function renderSuscripcion(el) {
+  var body = await planesHtml();
+  el.innerHTML =
+    '<div class="topbar"><div><h1 class="pg-title">Suscripción</h1>' +
+    '<p class="pg-sub">Elige el plan que mejor se adapte a ti</p></div></div>' + body;
+}
 // ── Configuración ──────────────────────────────────────────────
 async function renderConfiguracion(el) {
   var user = State.session;
@@ -738,35 +980,5 @@ async function renderMisVisitas(el) {
         '<span>Propiedad</span><span>Fecha</span><span>Hora</span><span>Estado</span>' +
       '</div>' +
       (rows || '<div style="padding:30px;text-align:center;color:var(--t3)">Sin visitas agendadas</div>') +
-    '</div>';
-}
-
-// ── Mis Pagos (inquilino) ──────────────────────────────────────
-async function renderMisPagos(el) {
-  const pagos = await getMyPagos();
-  var total   = pagos.reduce(function(s,p){return s+p.monto;},0);
-
-  var rows = pagos.map(function(p, i) {
-    var propTitulo = (p.inquilino && p.inquilino.titulo) ? p.inquilino.titulo : '—';
-    return '<div class="t-row" style="grid-template-columns:1.5fr 1fr .7fr 1fr;background:' + (i%2?'#f9fafb':'#fff') + '">' +
-      '<span style="font-size:13px;font-weight:600">' + sanitize(propTitulo) + '</span>' +
-      '<span style="font-size:15px;font-weight:800;color:var(--pr)">' + formatCOP(p.monto) + '</span>' +
-      '<span style="font-size:12.5px;color:var(--t2)">' + sanitize(p.fecha) + '</span>' +
-      estadoBadge(p.estado) +
-    '</div>';
-  }).join('');
-
-  el.innerHTML =
-    '<div class="topbar"><div><h1 class="pg-title">Mis Pagos</h1></div></div>' +
-    '<div class="kpi-grid">' +
-      kpiCard('💰','#f0fdf4','Total pagado', formatShort(total), 'COP') +
-      kpiCard('📋','#eff3fb','Transacciones', pagos.length) +
-      kpiCard('⏳','#fefce8','Pendientes', pagos.filter(function(p){return p.estado==='pendiente';}).length) +
-    '</div>' +
-    '<div class="tbl-wrap" style="margin-top:20px">' +
-      '<div class="t-head" style="grid-template-columns:1.5fr 1fr .7fr 1fr">' +
-        '<span>Propiedad</span><span>Monto</span><span>Fecha</span><span>Estado</span>' +
-      '</div>' +
-      (rows || '<div style="padding:30px;text-align:center;color:var(--t3)">Sin pagos</div>') +
     '</div>';
 }

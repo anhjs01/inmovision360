@@ -21,6 +21,7 @@ export class CreatePropiedadDto {
   @IsOptional() @IsInt() @Min(0) @Max(50)   banos?: number;
   @IsInt() @Min(1)                          metros: number;
   @IsOptional() @IsInt() @Min(0) @Max(50)   parqueaderos?: number;
+  @IsOptional() @IsString() @MaxLength(2000) descripcion?: string;
 
   @IsOptional() @IsArray() @ArrayMaxSize(MAX_FOTOS)
   @Matches(FOTO_REGEX, { each: true, message: 'Cada foto debe ser una URL http(s) o un archivo subido' })
@@ -48,6 +49,7 @@ export class UpdatePropiedadDto {
   @IsOptional() @IsInt() @Min(0) @Max(50)                 banos?: number;
   @IsOptional() @IsInt() @Min(1)                          metros?: number;
   @IsOptional() @IsInt() @Min(0) @Max(50)                 parqueaderos?: number;
+  @IsOptional() @IsString() @MaxLength(2000)              descripcion?: string;
 
   @IsOptional() @IsArray() @ArrayMaxSize(MAX_FOTOS)
   @Matches(FOTO_REGEX, { each: true, message: 'Cada foto debe ser una URL http(s) o un archivo subido' })

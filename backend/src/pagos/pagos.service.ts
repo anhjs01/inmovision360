@@ -30,10 +30,11 @@ export class PagosService {
 
   async create(ownerId: string, dto: CreatePagoDto) {
     await this.assertOwnProp(dto.propId, ownerId);
-    const inquilinoId = await this.resolveInquilino(dto.inquilino);
+    // Sin inquilino el pago queda como directo/general
+    const inquilinoId = dto.inquilino?.trim() ? await this.resolveInquilino(dto.inquilino) : null;
     const { inquilino: _texto, ...rest } = dto;
     return this.prisma.pago.create({
-      data:    { ...rest, estado: rest.estado || 'pendiente', ownerId, inquilinoId },
+      data:    { ...rest, concepto: rest.concepto?.trim() || null, estado: rest.estado || 'pendiente', ownerId, inquilinoId },
       include: INCLUDE,
     });
   }
@@ -43,7 +44,8 @@ export class PagosService {
     if (dto.propId) await this.assertOwnProp(dto.propId, ownerId);
     const { inquilino, ...rest } = dto;
     const data: any = { ...rest };
-    if (inquilino) data.inquilinoId = await this.resolveInquilino(inquilino);
+    if (inquilino !== undefined) data.inquilinoId = inquilino?.trim() ? await this.resolveInquilino(inquilino) : null;
+    if (rest.concepto !== undefined) data.concepto = rest.concepto?.trim() || null;
     return this.prisma.pago.update({ where: { id }, data, include: INCLUDE });
   }
 

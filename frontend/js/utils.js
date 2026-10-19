@@ -21,16 +21,39 @@ export function safeUrl(url) {
   return typeof url === 'string' && /^https?:\/\//i.test(url.trim()) ? url.trim() : '';
 }
 
-// ── Formateadores de moneda ──────────────────────────────────
-export function formatCOP(amount) {
-  return '$' + Number(amount).toLocaleString('es-CO');
+// ── Formateadores numéricos (es-CO: miles con punto, decimales con coma) ──
+export function formatNum(value, decimals = 0) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '0';
+  return n.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: decimals });
 }
 
+// $1.800.000 (los pesos no llevan decimales)
+export function formatCOP(amount) {
+  return '$' + formatNum(Math.round(Number(amount) || 0));
+}
+
+// $1,8 M · $950 mil · $1.250 M
 export function formatShort(amount) {
-  if (amount >= 1_000_000) {
-    return '$' + (amount / 1_000_000).toFixed(1).replace('.0', '') + 'M';
-  }
-  return '$' + (amount / 1_000).toFixed(0) + 'k';
+  const n = Number(amount) || 0;
+  if (Math.abs(n) >= 1_000_000) return '$' + formatNum(n / 1_000_000, 1) + ' M';
+  if (Math.abs(n) >= 1_000)     return '$' + formatNum(n / 1_000) + ' mil';
+  return formatCOP(n);
+}
+
+// Convierte "1.800.000" o "1800000" a número entero
+export function parseCOP(text) {
+  const n = parseInt(String(text ?? '').replace(/[^\d]/g, ''), 10);
+  return Number.isFinite(n) ? n : NaN;
+}
+
+// "2025-03-05" o ISO → "05 mar 2025"
+export function formatFecha(value) {
+  if (!value) return '';
+  const s = String(value);
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(s) ? new Date(s + 'T00:00:00') : new Date(s);
+  if (Number.isNaN(d.getTime())) return s;
+  return d.toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ de /g, ' ');
 }
 
 // ── Helpers de texto ─────────────────────────────────────────

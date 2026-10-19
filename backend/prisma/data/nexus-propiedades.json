@@ -1,0 +1,183 @@
+[
+ {
+  "titulo": "Penthouse Rosales 360°",
+  "ciudad": "bogotá",
+  "barrio": "Rosales",
+  "tipo": "apartamento",
+  "listing": "rent",
+  "precio": 4800000,
+  "estrato": 6,
+  "habitaciones": 4,
+  "banos": 3,
+  "metros": 220,
+  "parqueaderos": 2,
+  "descripcion": "Espectacular penthouse en el exclusivo sector de Rosales con vista panorámica 360° de Bogotá. Acabados de lujo, terraza privada con jacuzzi y acceso directo al parque El Virrey. Ideal para ejecutivos y familias que buscan lo mejor de la ciudad.",
+  "fotos": [
+   "https://images.unsplash.com/photo-1613977257363-707ba9348227?w=800&q=80",
+   "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=800&q=80",
+   "https://images.unsplash.com/photo-1484154218962-a197022b5858?w=800&q=80",
+   "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=800&q=80"
+  ],
+  "comodidades": [
+   "piscina",
+   "gimnasio",
+   "parqueadero",
+   "terraza"
+  ],
+  "video": null,
+  "tourVirtual": true,
+  "tourUrl": "https://kuula.co/share/7vBk7",
+  "tourTipo": "Kuula",
+  "mapa2d": true,
+  "destacado": true
+ },
+ {
+  "titulo": "Loft Industrial Laureles",
+  "ciudad": "medellín",
+  "barrio": "Laureles",
+  "tipo": "loft",
+  "listing": "rent",
+  "precio": 1850000,
+  "estrato": 4,
+  "habitaciones": 1,
+  "banos": 1,
+  "metros": 72,
+  "parqueaderos": 0,
+  "descripcion": "Moderno loft de diseño industrial en Laureles. Completamente amoblado con mobiliario de diseñador. Ideal para profesionales o parejas. A 5 minutos del metro Estadio.",
+  "fotos": [
+   "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=800&q=80",
+   "https://images.unsplash.com/photo-1505873242700-f289a29e1724?w=800&q=80",
+   "https://images.unsplash.com/photo-1556912172-45b7abe8b7e1?w=800&q=80"
+  ],
+  "comodidades": [
+   "gimnasio",
+   "amoblado"
+  ],
+  "video": null,
+  "tourVirtual": false,
+  "tourUrl": null,
+  "tourTipo": null,
+  "mapa2d": false,
+  "destacado": false
+ },
+ {
+  "titulo": "Casa Campestre La Calera",
+  "ciudad": "bogotá",
+  "barrio": "La Calera",
+  "tipo": "casa",
+  "listing": "rent_sale",
+  "precio": 5500000,
+  "estrato": 5,
+  "habitaciones": 6,
+  "banos": 5,
+  "metros": 550,
+  "parqueaderos": 3,
+  "descripcion": "Imponente casa campestre a 20 minutos de Bogotá con vista a la montaña. Piscina climatizada, sala de cine, cancha de tenis y jardín de 2.000 m². El retiro perfecto cerca de la ciudad.",
+  "fotos": [
+   "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=800&q=80",
+   "https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=800&q=80",
+   "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=800&q=80",
+   "https://images.unsplash.com/photo-1505691938895-1758d7feb511?w=800&q=80"
+  ],
+  "comodidades": [
+   "piscina",
+   "parqueadero",
+   "terraza",
+   "mascotas"
+  ],
+  "video": "https://www.w3schools.com/html/mov_bbb.mp4",
+  "tourVirtual": false,
+  "tourUrl": null,
+  "tourTipo": null,
+  "mapa2d": true,
+  "destacado": true
+ },
+ {
+  "titulo": "Apartamento Santa Bárbara",
+  "ciudad": "bogotá",
+  "barrio": "Santa Bárbara",
+  "tipo": "apartamento",
+  "listing": "rent",
+  "precio": 2650000,
+  "estrato": 5,
+  "habitaciones": 3,
+  "banos": 2,
+  "metros": 140,
+  "parqueaderos": 1,
+  "descripcion": "Amplio apartamento en el sector más exclusivo de Bogotá norte. Cocina integral, cuarto de servicio y salón comunal. Conjunto cerrado con seguridad 24/7.",
+  "fotos": [
+   "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=800&q=80",
+   "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=800&q=80"
+  ],
+  "comodidades": [
+   "gimnasio",
+   "parqueadero",
+   "amoblado"
+  ],
+  "video": null,
+  "tourVirtual": false,
+  "tourUrl": null,
+  "tourTipo": null,
+  "mapa2d": false,
+  "destacado": false
+ },
+ {
+  "titulo": "Ático Cartagena Bay View",
+  "ciudad": "cartagena",
+  "barrio": "Bocagrande",
+  "tipo": "apartamento",
+  "listing": "rent",
+  "precio": 4200000,
+  "estrato": 6,
+  "habitaciones": 3,
+  "banos": 3,
+  "metros": 185,
+  "parqueaderos": 2,
+  "descripcion": "Espectacular ático con vista panorámica al mar Caribe. Terraza privada con jacuzzi, sala abierta con brisa marina y acceso directo a la playa. La joya de Bocagrande.",
+  "fotos": [
+   "https://images.unsplash.com/photo-1551882547-ff40c63fe5fa?w=800&q=80",
+   "https://images.unsplash.com/photo-1571896349842-33c89424de2d?w=800&q=80",
+   "https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800&q=80"
+  ],
+  "comodidades": [
+   "piscina",
+   "gimnasio",
+   "parqueadero",
+   "terraza"
+  ],
+  "video": null,
+  "tourVirtual": true,
+  "tourUrl": "https://my.matterport.com/show/?m=aSx1MpRRqif",
+  "tourTipo": "Matterport",
+  "mapa2d": true,
+  "destacado": true
+ },
+ {
+  "titulo": "Estudio Chapinero Alto",
+  "ciudad": "bogotá",
+  "barrio": "Chapinero",
+  "tipo": "estudio",
+  "listing": "rent",
+  "precio": 900000,
+  "estrato": 3,
+  "habitaciones": 1,
+  "banos": 1,
+  "metros": 38,
+  "parqueaderos": 0,
+  "descripcion": "Acogedor estudio completamente amoblado con excelente iluminación natural. Ideal para estudiantes y profesionales. Acepta mascotas. A 2 cuadras de la Séptima.",
+  "fotos": [
+   "https://images.unsplash.com/photo-1536376072261-38c75010e6c9?w=800&q=80",
+   "https://images.unsplash.com/photo-1540518614846-7eded433c457?w=800&q=80"
+  ],
+  "comodidades": [
+   "amoblado",
+   "mascotas"
+  ],
+  "video": null,
+  "tourVirtual": false,
+  "tourUrl": null,
+  "tourTipo": null,
+  "mapa2d": false,
+  "destacado": false
+ }
+]

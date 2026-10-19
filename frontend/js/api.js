@@ -284,15 +284,18 @@ export const UsuariosApi = {
     ),
 };
 
+// Query string sin claves vacías: URLSearchParams convierte undefined/null en "undefined"/"null"
+export function toQuery(params = {}) {
+  const clean = Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== '');
+  return new URLSearchParams(clean).toString();
+}
+
 // PROPIEDADES
 export const PropiedadesApi = {
   findAll: (params = {}) =>
     apiFetch(
       'GET',
-      '/propiedades?' +
-        new URLSearchParams(
-          params
-        ).toString()
+      '/propiedades?' + toQuery(params)
     ),
 
   findOne: (id) =>
