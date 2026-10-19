@@ -140,9 +140,11 @@ async function doRefresh() {
 }
 
 // ── Upload (multipart) ────────────────────────────────────────
+// No se fija Content-Type: el navegador agrega el boundary de multipart/form-data
 export async function apiUpload(
   path,
-  formData
+  formData,
+  retry = true
 ) {
   const token = getToken();
 
@@ -162,7 +164,28 @@ export async function apiUpload(
     }
   );
 
-  return res.json();
+  if (res.status === 401 && retry && await doRefresh()) {
+    return apiUpload(path, formData, false);
+  }
+
+  return res
+    .json()
+    .catch(() => ({
+      ok: false,
+      error: {
+        message: 'Error de red',
+      },
+    }));
+}
+
+// ── URLs de archivos subidos ──────────────────────────────────
+// El backend guarda rutas relativas (/uploads/…); el frontend corre en otro
+// origen (Live Server :5500), así que hay que anteponer el origen de la API.
+const API_ORIGIN = new URL(BASE_URL).origin;
+
+export function mediaUrl(src) {
+  if (!src) return '';
+  return src.startsWith('/uploads/') ? API_ORIGIN + src : src;
 }
 
 // AUTH
@@ -376,6 +399,13 @@ export const VisitasApi = {
       }
     ),
 
+  update: (id, dto) =>
+    apiFetch(
+      'PATCH',
+      `/visitas/${id}`,
+      dto
+    ),
+
   remove: (id) =>
     apiFetch(
       'DELETE',
@@ -497,11 +527,26 @@ export const PagosApi = {
       }
     ),
 
-  iniciarWompi: (dto) =>
+  update: (id, dto) =>
+    apiFetch(
+      'PATCH',
+      `/pagos/${id}`,
+      dto
+    ),
+
+  remove: (id) =>
+    apiFetch(
+      'DELETE',
+      `/pagos/${id}`
+    ),
+
+  iniciarWompi: (pagoId) =>
     apiFetch(
       'POST',
       '/pagos/wompi/iniciar',
-      dto
+      {
+        pago_id: pagoId,
+      }
     ),
 };
 

@@ -6,11 +6,19 @@
 'use strict';
 
 // ── Sanitizador XSS básico ───────────────────────────────────
-// En producción: reemplazar con DOMPurify
+// Escapa también comillas: el resultado se usa dentro de atributos (value="…", src="…")
 export function sanitize(value) {
-  const div = document.createElement('div');
-  div.textContent = String(value ?? '');
-  return div.innerHTML;
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// Solo URLs http(s): evita javascript:… en iframes/enlaces
+export function safeUrl(url) {
+  return typeof url === 'string' && /^https?:\/\//i.test(url.trim()) ? url.trim() : '';
 }
 
 // ── Formateadores de moneda ──────────────────────────────────

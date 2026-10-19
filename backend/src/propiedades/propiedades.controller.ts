@@ -1,8 +1,8 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, Query } from '@nestjs/common';
 import { PropiedadesService } from './propiedades.service';
 import { CurrentUser }        from '../common/decorators/current-user.decorator';
 import { Public, Roles }      from '../common/decorators/roles.decorator';
-import { OptionalJwtGuard }   from '../auth/guards/optional-jwt.guard';
+import { CreatePropiedadDto, UpdatePropiedadDto } from './dto/propiedad.dto';
 
 @Controller('propiedades')
 export class PropiedadesController {
@@ -20,11 +20,11 @@ export class PropiedadesController {
 
   @Post()
   @Roles('arrendador')
-  create(@CurrentUser() u: any, @Body() body: any) { return this.svc.create(u.id, u.plan ?? 'free', body); }
+  create(@CurrentUser() u: any, @Body() body: CreatePropiedadDto) { return this.svc.create(u.id, u.plan ?? 'free', body); }
 
   @Patch(':id')
   @Roles('arrendador')
-  update(@Param('id') id: string, @CurrentUser() u: any, @Body() body: any) { return this.svc.update(id, u.id, body); }
+  update(@Param('id') id: string, @CurrentUser() u: any, @Body() body: UpdatePropiedadDto) { return this.svc.update(id, u.id, body); }
 
   @Delete(':id')
   @Roles('arrendador')

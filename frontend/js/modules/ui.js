@@ -4,9 +4,9 @@
 'use strict';
 
 import { State, getMyProps, getAllProps, getMyVisitas, getMyPagos,
-         getKPIs, getLeads, getMensajes, getUnreadCount, markMensajeRead,
-         getFavProps, isFav, toggleFav, logout } from './store.js';
-import { MensajesApi, EstadisticasApi, UsuariosApi } from '../api.js';
+         getKPIs, getLeads, getMensajes, getUnreadCount, updateLead,
+         getFavProps, isFav } from './store.js';
+import { MensajesApi, EstadisticasApi, UsuariosApi, SuscripcionesApi, VisitasApi, mediaUrl } from '../api.js';
 import { formatCOP, formatShort, sanitize, capitalize, getEl,
          CITY_LABELS, AMENITY_LABELS, LISTING_LABELS, PLAN_COLORS } from '../utils.js';
 
@@ -109,46 +109,30 @@ export async function showView(name) {
   };
   if (renderers[name]) await renderers[name](el);
   await updateBadges();
+}
 
-  // ── Handlers globales para acciones de filas ─────────────
-  window.__updateLeadEstado = async function(leadId, nuevoEstado) {
-    try {
-      const { LeadsApi } = await import('../api.js');
-      await LeadsApi.update(leadId, { estado: nuevoEstado });
-      showToast('Lead actualizado ✓', 'success');
-    } catch(e) { showToast(e.message || 'Error', 'error'); }
-  };
+// Cambio rápido de estado desde el <select> de la tabla CRM
+window.__updateLeadEstado = async function(leadId, nuevoEstado) {
+  try {
+    await updateLead(leadId, { estado: nuevoEstado });
+    showToast('Lead actualizado ✓', 'success');
+    await refreshView();
+  } catch(e) { showToast(e.message || 'Error', 'error'); }
+};
 
-  window.__deleteLead = async function(leadId) {
-    if (!confirm('¿Eliminar este lead?')) return;
-    try {
-      const { LeadsApi } = await import('../api.js');
-      await LeadsApi.remove(leadId);
-      showToast('Lead eliminado', 'error');
-      await refreshView();
-    } catch(e) { showToast(e.message || 'Error', 'error'); }
+// Botón pequeño de acción para filas de tablas
+function rowBtn(label, onclick, kind) {
+  const styles = {
+    edit: 'color:var(--pr);border:1px solid #d0d9f0;background:#eff3fb',
+    del:  'color:var(--da);border:1px solid #fecaca;background:#fef2f2',
+    ok:   'color:var(--ac);border:1px solid #a7f3d0;background:#f0fdf4;font-weight:600',
   };
+  return '<button style="font-size:11px;border-radius:7px;padding:3px 8px;cursor:pointer;font-family:var(--f);' + styles[kind] + '" onclick="' + onclick + '">' + label + '</button>';
+}
 
-  window.__deleteVisita = async function(visitaId) {
-    if (!confirm('¿Eliminar esta visita?')) return;
-    try {
-      const { VisitasApi } = await import('../api.js');
-      await VisitasApi.remove(visitaId);
-      showToast('Visita eliminada', 'error');
-      await refreshView();
-      await updateBadges();
-    } catch(e) { showToast(e.message || 'Error', 'error'); }
-  };
-
-  window.__deletePago = async function(pagoId) {
-    if (!confirm('¿Eliminar este registro de pago?')) return;
-    try {
-      const { PagosApi } = await import('../api.js');
-      await PagosApi.updateEstado(pagoId, 'cancelado');
-      showToast('Pago cancelado y eliminado', 'error');
-      await refreshView();
-    } catch(e) { showToast(e.message || 'Error', 'error'); }
-  };
+function estadoBadge(estado) {
+  const cls = { confirmada:'b-ok', pagado:'b-ok', pendiente:'b-w', cancelada:'b-d', vencido:'b-d' }[estado] || 'b-w';
+  return '<span class="badge ' + cls + '">' + sanitize(String(estado).toUpperCase()) + '</span>';
 }
 
 export async function refreshView() { await showView(currentView); }
@@ -183,7 +167,7 @@ function emptyState(ico, title, msg, action) {
 
 function buildPropertyCard(p, mode) {
   mode = mode || 'public';
-  const mainPhoto = (p.fotos && p.fotos.length) ? p.fotos[0] : '';
+  const mainPhoto = (p.fotos && p.fotos.length) ? mediaUrl(p.fotos[0]) : '';
   const tags = (p.comodidades || []).slice(0,3).map(function(a) {
     return '<span class="pc-tg">' + (AMENITY_LABELS[a] || a) + '</span>';
   }).join('');
@@ -325,16 +309,20 @@ async function renderCatalogo(el) {
 // ── Visitas ────────────────────────────────────────────────────
 async function renderVisitas(el) {
   const visitas = await getMyVisitas();
+  var cols = '1fr 1.3fr .8fr .6fr 1.8fr';
   var rows = visitas.map(function(v, i) {
-    var propTitulo = (v.inquilino && v.inquilino.titulo) ? v.inquilino.titulo : (v.prop || '—');
-    return '<div class="t-row" style="grid-template-columns:1fr 1.4fr .9fr .8fr 1.2fr;background:' + (i % 2 ? '#f9fafb' : '#fff') + '">' +
+    var propTitulo = (v.inquilino && v.inquilino.titulo) ? v.inquilino.titulo : '—';
+    var toggle = v.estado === 'pendiente' ? 'Confirmar' : v.estado === 'confirmada' ? 'Desconfirmar' : 'Reabrir';
+    return '<div class="t-row" style="grid-template-columns:' + cols + ';background:' + (i % 2 ? '#f9fafb' : '#fff') + '">' +
       '<span style="font-size:13px;font-weight:600">' + sanitize(v.cliente) + '</span>' +
       '<span style="font-size:12.5px;color:var(--t2)">' + sanitize(propTitulo) + '</span>' +
-      '<span style="font-size:12.5px;color:var(--t2)">' + v.fecha + '</span>' +
-      '<span style="font-size:12.5px;color:var(--t2)">' + v.hora + '</span>' +
-      '<div style="display:flex;align-items:center;gap:7px">' +
-        '<span class="badge ' + (v.estado === 'confirmada' ? 'b-ok' : 'b-w') + '">' + v.estado.toUpperCase() + '</span>' +
-        '<button style="font-size:11px;color:var(--pr);border:1px solid #d0d9f0;border-radius:7px;padding:3px 8px;background:#eff3fb;cursor:pointer;font-family:var(--f)" onclick="window.__toggleVisita(\'' + v.id + '\')">' + (v.estado === 'pendiente' ? 'Confirmar' : 'Cancelar') + '</button>' +
+      '<span style="font-size:12.5px;color:var(--t2)">' + sanitize(v.fecha) + '</span>' +
+      '<span style="font-size:12.5px;color:var(--t2)">' + sanitize(v.hora) + '</span>' +
+      '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">' +
+        estadoBadge(v.estado) +
+        rowBtn(toggle, 'window.__toggleVisita(\'' + v.id + '\')', 'ok') +
+        rowBtn('✏️', 'window.__openVisitaForm(\'' + v.id + '\')', 'edit') +
+        rowBtn('🗑', 'window.__delVisita(\'' + v.id + '\')', 'del') +
       '</div></div>';
   }).join('');
 
@@ -342,86 +330,170 @@ async function renderVisitas(el) {
     '<div class="topbar"><div><h1 class="pg-title">Visitas</h1><p class="pg-sub">' + visitas.length + ' programadas</p></div>' +
     '<button class="btn-a" onclick="window.__openVisitaForm()">+ Agendar</button></div>' +
     '<div class="tbl-wrap">' +
-      '<div class="t-head" style="grid-template-columns:1fr 1.4fr .9fr .8fr 1.2fr">' +
-        '<span>Cliente</span><span>Propiedad</span><span>Fecha</span><span>Hora</span><span>Estado / Acción</span>' +
+      '<div class="t-head" style="grid-template-columns:' + cols + '">' +
+        '<span>Cliente</span><span>Propiedad</span><span>Fecha</span><span>Hora</span><span>Estado / Acciones</span>' +
       '</div>' +
       '<div id="vb">' + (rows || '<div style="padding:30px;text-align:center;color:var(--t3)">Sin visitas</div>') + '</div>' +
     '</div>';
 }
 
 // ── Mensajes ───────────────────────────────────────────────────
-async function renderMensajes(el) {
-  const msgs = await getMensajes();
+// El backend agrupa los mensajes por interlocutor: cada elemento de State.mensajes
+// es { id: otroUsuarioId, usuario, ultimoMensaje, propiedad, unreadCount }.
+function conversationName(c) {
+  const u = c && c.usuario;
+  return (u ? ((u.nombre || '') + ' ' + (u.apellido || '')).trim() : '') || 'Usuario';
+}
 
-  var inboxHtml = msgs.map(function(m) {
-    var nombre = (m.de && m.de.nombre) ? (m.de.nombre + ' ' + (m.de.apellido || '')) : (m.de || '—');
-    var inicial = nombre[0] ? nombre[0].toUpperCase() : 'U';
-    var hora    = m.createdAt ? new Date(m.createdAt).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}) : '';
-    var titulo  = (m.propiedad && m.propiedad.titulo) ? m.propiedad.titulo : '—';
-    return '<div class="msg-row' + (selectedMsg === m.id ? ' sel' : '') + '" onclick="window.__selectMsg(\'' + m.id + '\')">' +
-      '<div class="msg-av">' + inicial + '</div>' +
+function horaCorta(fecha) {
+  return fecha ? new Date(fecha).toLocaleTimeString('es-CO', { hour:'2-digit', minute:'2-digit' }) : '';
+}
+
+function firstFoto(propiedad) {
+  try {
+    const fotos = typeof propiedad?.fotos === 'string' ? JSON.parse(propiedad.fotos) : propiedad?.fotos;
+    return Array.isArray(fotos) && fotos.length ? mediaUrl(fotos[0]) : '';
+  } catch (_) { return ''; }
+}
+
+function renderConversationListHtml(convs) {
+  return convs.map(function(c) {
+    const nombre  = conversationName(c);
+    const ultimo  = c.ultimoMensaje || {};
+    const unread  = Number(c.unreadCount || 0);
+    const titulo  = (c.propiedad && c.propiedad.titulo) || 'Conversación';
+    return '<div class="msg-row' + (selectedMsg === c.id ? ' sel' : '') + '" data-conv="' + c.id + '" onclick="window.__selectMsg(\'' + c.id + '\')">' +
+      '<div class="msg-av">' + sanitize(nombre.charAt(0).toUpperCase() || 'U') + '</div>' +
       '<div style="flex:1;min-width:0">' +
-        '<div style="display:flex;justify-content:space-between;margin-bottom:2px">' +
-          '<span style="font-size:13px;font-weight:' + (m.leido ? '400' : '700') + ';color:var(--t1)">' + sanitize(nombre) + '</span>' +
-          '<span style="font-size:11px;color:var(--t3)">' + hora + '</span>' +
+        '<div style="display:flex;justify-content:space-between;gap:8px;margin-bottom:2px">' +
+          '<span style="font-size:13px;font-weight:' + (unread ? '700' : '500') + ';color:var(--t1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + sanitize(nombre) + '</span>' +
+          '<span style="font-size:11px;color:var(--t3);flex-shrink:0">' + horaCorta(ultimo.createdAt) + '</span>' +
         '</div>' +
-        '<p style="font-size:12px;color:var(--t2);margin:0 0 2px;font-weight:' + (m.leido ? '400' : '600') + '">' + sanitize(titulo) + '</p>' +
-        '<p style="font-size:12px;color:var(--t3);margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + sanitize(m.texto) + '</p>' +
+        '<p style="font-size:12px;color:var(--t2);margin:0 0 2px;font-weight:' + (unread ? '600' : '400') + ';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + sanitize(titulo) + '</p>' +
+        '<p style="font-size:12px;color:var(--t3);margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + sanitize(ultimo.texto || '') + '</p>' +
       '</div>' +
-      (!m.leido ? '<div style="width:7px;height:7px;border-radius:50%;background:var(--ac);margin-top:5px;flex-shrink:0"></div>' : '') +
+      (unread ? '<div style="min-width:18px;height:18px;padding:0 5px;border-radius:10px;background:var(--ac);color:#fff;font-size:10px;font-weight:700;display:grid;place-items:center;align-self:center">' + unread + '</div>' : '') +
     '</div>';
   }).join('') || '<div style="padding:30px;text-align:center;color:var(--t3)">Sin mensajes</div>';
+}
 
+async function renderMensajes(el) {
+  const convs = await getMensajes();
   el.innerHTML =
     '<div class="topbar" style="padding-bottom:14px"><h1 class="pg-title">Mensajes</h1></div>' +
-    '<div class="msg-layout">' +
-      '<div class="msg-inbox" id="msg-inbox">' + inboxHtml + '</div>' +
-      '<div id="msg-det" style="display:grid;place-items:center;color:var(--t3);font-size:14px">Selecciona un mensaje</div>' +
+    '<div class="msg-layout" id="msg-layout">' +
+      '<div class="msg-inbox" id="msg-inbox">' + renderConversationListHtml(convs) + '</div>' +
+      '<div id="msg-det" class="msg-chat">' +
+        '<div class="msg-empty"><div class="msg-empty-inner">' +
+          '<div class="msg-empty-icon">💬</div>' +
+          '<div style="font-size:15px;font-weight:600;color:var(--t1);margin-bottom:5px">Tus conversaciones</div>' +
+          '<div style="font-size:13px;line-height:1.5">Selecciona una conversación para comenzar</div>' +
+        '</div></div>' +
+      '</div>' +
     '</div>';
 }
 
-export async function selectMessage(id) {
-  const msgs = State.mensajes || [];
-  const msg  = msgs.find(function(m) { return m.id === id; });
-  if (!msg) return;
-  await markMensajeRead(id);
-  selectedMsg = id;
+function bubbleHtml(m) {
+  const isMine = State.session && m.deId === State.session.id;
+  const side   = isMine ? 'mine' : 'theirs';
+  const prop   = m.propiedad;
+  const img    = firstFoto(prop);
+  const propHtml = prop
+    ? '<div class="msg-property">' +
+        (img ? '<img class="msg-property-image" src="' + sanitize(img) + '">' : '') +
+        '<div class="msg-property-info">' +
+          '<div class="msg-property-title">' + sanitize(prop.titulo || 'Propiedad') + '</div>' +
+          (prop.precio ? '<div class="msg-property-price">' + formatCOP(prop.precio) + '</div>' : '') +
+        '</div>' +
+      '</div>'
+    : '';
+  return '<div class="msg-bubble-row ' + side + '"><div class="msg-bubble ' + side + '">' +
+    propHtml +
+    '<div class="msg-bubble-text">' + sanitize(m.texto || '') + '</div>' +
+    '<div class="msg-bubble-time">' + horaCorta(m.createdAt) + '</div>' +
+  '</div></div>';
+}
 
-  var nombre = (msg.de && msg.de.nombre) ? (msg.de.nombre + ' ' + (msg.de.apellido || '')) : (msg.de || '—');
-  var titulo = (msg.propiedad && msg.propiedad.titulo) ? msg.propiedad.titulo : '—';
-  var inicial = nombre[0] ? nombre[0].toUpperCase() : 'U';
+export async function selectMessage(userId) {
+  const conversation = (State.mensajes || []).find(function(c) { return c.id === userId; });
+  if (!conversation) return;
+  selectedMsg = userId;
 
-  var det = getEl('msg-det');
+  const res     = await MensajesApi.getConversacion(userId);
+  const history = res && res.ok ? res.data : [];
+  await MensajesApi.markConversationRead(userId);
+  conversation.unreadCount = 0;
+  const inboxEl = getEl('msg-inbox');
+  if (inboxEl) inboxEl.innerHTML = renderConversationListHtml(State.mensajes || []);
+
+  const det = getEl('msg-det');
   if (!det) return;
+  const nombre    = conversationName(conversation);
+  const propiedad = conversation.propiedad;
 
   det.innerHTML =
-    '<div style="padding:24px;display:flex;flex-direction:column;height:100%">' +
-      '<div style="display:flex;align-items:center;gap:13px;margin-bottom:18px;padding-bottom:15px;border-bottom:1px solid var(--bo)">' +
-        '<div class="msg-av" style="width:44px;height:44px;font-size:14px">' + inicial + '</div>' +
-        '<div><h3 style="font-size:15px;font-weight:700;color:var(--t1);margin:0 0 2px">' + sanitize(nombre) + '</h3>' +
-             '<p style="font-size:12px;color:var(--t2);margin:0">📍 ' + sanitize(titulo) + '</p></div>' +
+    '<div class="msg-chat-head">' +
+      '<button class="msg-back" id="msg-back" type="button" aria-label="Volver">‹</button>' +
+      '<div class="msg-av" style="width:44px;height:44px;min-width:44px;font-size:14px">' + sanitize(nombre.charAt(0).toUpperCase() || 'U') + '</div>' +
+      '<div class="msg-chat-head-info">' +
+        '<h3 class="msg-chat-head-name">' + sanitize(nombre) + '</h3>' +
+        (propiedad ? '<p class="msg-chat-head-property">📍 ' + sanitize(propiedad.titulo || 'Propiedad') + '</p>' : '') +
       '</div>' +
-      '<div style="flex:1;background:#f9fafb;border-radius:12px;padding:16px;margin-bottom:14px">' +
-        '<p style="font-size:14px;color:var(--t1);line-height:1.7;margin:0">' + sanitize(msg.texto) + '</p>' +
-      '</div>' +
-      '<div style="display:flex;gap:8px">' +
-        '<textarea id="reply-txt" placeholder="Escribe una respuesta…" style="flex:1;padding:9px 12px;border:1.5px solid var(--bo);border-radius:10px;font-size:13px;resize:none;height:46px;outline:none;font-family:var(--f)"></textarea>' +
-        '<button class="btn-a" id="btn-reply" style="padding:9px 18px">Enviar</button>' +
-      '</div>' +
+    '</div>' +
+    '<div id="conversation-messages" class="msg-chat-messages">' +
+      (history.length ? history.map(bubbleHtml).join('') : '<div style="height:100%;display:grid;place-items:center;text-align:center;color:var(--t3);padding:30px">No hay mensajes todavía</div>') +
+    '</div>' +
+    '<div class="msg-composer">' +
+      '<textarea id="reply-txt" placeholder="Escribe una respuesta…" rows="1" maxlength="2000"></textarea>' +
+      '<button class="btn-a" id="btn-reply" type="button">Enviar</button>' +
     '</div>';
 
-  var replyBtn = getEl('btn-reply');
-  if (replyBtn) replyBtn.onclick = async function() {
-    var text = getEl('reply-txt') ? getEl('reply-txt').value.trim() : '';
-    if (!text) return;
-    await MensajesApi.send({ destinatario_id: msg.deId, prop_id: msg.propId, texto: text });
-    showToast('Respuesta enviada ✓','success');
-    if (getEl('reply-txt')) getEl('reply-txt').value = '';
+  const layout = getEl('msg-layout');
+  if (layout) layout.classList.add('chat-open');
+
+  const box = getEl('conversation-messages');
+  if (box) box.scrollTop = box.scrollHeight;
+
+  getEl('msg-back').onclick = function() {
+    if (layout) layout.classList.remove('chat-open');
+    selectedMsg = null;
+    document.querySelectorAll('.msg-row').forEach(function(r) { r.classList.remove('sel'); });
   };
 
-  document.querySelectorAll('.msg-row').forEach(function(r) { r.classList.remove('sel'); });
-  var activeRow = document.querySelector('.msg-row[onclick*="' + id + '"]');
-  if (activeRow) activeRow.classList.add('sel');
+  const input    = getEl('reply-txt');
+  const replyBtn = getEl('btn-reply');
+  replyBtn.onclick = async function() {
+    const text = input.value.trim();
+    if (!text) return;
+    // La respuesta va asociada a la propiedad más reciente de la conversación
+    const ultimoConProp = history.slice().reverse().find(function(m) { return m.propId; });
+    const propId = (ultimoConProp && ultimoConProp.propId) || (propiedad && propiedad.id);
+    if (!propId) { showToast('No se encontró la propiedad asociada a esta conversación', 'error'); return; }
+
+    replyBtn.disabled = true;
+    try {
+      const r = await MensajesApi.send({ destinatario_id: userId, prop_id: propId, texto: text });
+      if (!r || !r.ok) { showToast((r && r.error && r.error.message) || 'No se pudo enviar el mensaje', 'error'); return; }
+      input.value = '';
+      await getMensajes();
+      const inbox = getEl('msg-inbox');
+      if (inbox) inbox.innerHTML = renderConversationListHtml(State.mensajes || []);
+      if (selectedMsg === userId) await selectMessage(userId);
+    } finally {
+      replyBtn.disabled = false;
+    }
+  };
+
+  // Enter envía, Shift+Enter hace salto de línea
+  input.onkeydown = function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (!replyBtn.disabled) replyBtn.click(); }
+  };
+  input.oninput = function() {
+    this.style.height = 'auto';
+    this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+  };
+
+  document.querySelectorAll('.msg-row').forEach(function(r) { r.classList.toggle('sel', r.dataset.conv === userId); });
   await updateBadges();
 }
 
@@ -450,7 +522,8 @@ async function renderCRM(el) {
         '<select style="font-size:10px;border:1px solid var(--bo);border-radius:6px;padding:2px 4px;cursor:pointer;font-family:var(--f);color:var(--t2);max-width:90px" onchange="window.__updateLeadEstado(\'' + l.id + '\',this.value)">' +
           ['new','contactado','interesado','visita_agendada','lost'].map(function(s){ return '<option value="' + s + '"' + (l.estado===s?' selected':'') + '>' + s + '</option>'; }).join('') +
         '</select>' +
-        '<button style="font-size:10px;color:var(--da);border:1px solid #fecaca;border-radius:6px;padding:2px 7px;background:#fef2f2;cursor:pointer;font-family:var(--f)" onclick="window.__deleteLead(\'' + l.id + '\')" title="Eliminar lead">🗑</button>' +
+        rowBtn('✏️', 'window.__openLeadForm(\'' + l.id + '\')', 'edit') +
+        rowBtn('🗑', 'window.__delLead(\'' + l.id + '\')', 'del') +
       '</div>' +
     '</div>';
   }).join('');
@@ -464,7 +537,7 @@ async function renderCRM(el) {
       kpiCard('✅','#f0fdf4','Activos', leads.filter(function(l) { return l.estado !== 'lost'; }).length) +
     '</div>' +
     '<div class="tbl-wrap" style="margin-top:20px">' +
-      '<div class="t-head" style="grid-template-columns:.8fr 1.2fr .6fr .5fr 1fr .6fr">' +
+      '<div class="t-head" style="grid-template-columns:.8fr 1.2fr .6fr .5fr .9fr 1.1fr">' +
         '<span>Nombre</span><span>Propiedad</span><span>Presupuesto</span><span>Score</span><span>Estado</span><span>Acciones</span>' +
       '</div>' +
       (rows || '<div style="padding:30px;text-align:center;color:var(--t3)">Sin leads</div>') +
@@ -517,20 +590,21 @@ async function renderPagos(el) {
   var pendiente = pagos.filter(function(p){return p.estado==='pendiente';}).reduce(function(s,p){return s+p.monto;},0);
   var vencidos  = pagos.filter(function(p){return p.estado==='vencido';}).reduce(function(s,p){return s+p.monto;},0);
 
+  var cols = '1fr 1.2fr .9fr .7fr .6fr 1.5fr';
   var rows = pagos.map(function(p, i) {
-    var propTitulo  = (p.inquilino && p.inquilino.titulo) ? p.inquilino.titulo : (p.prop || '—');
-    var inqNombre   = (p.inq && p.inq.nombre) ? (p.inq.nombre + ' ' + (p.inq.apellido||'')) : (p.inquilinoNombre || '—');
-    var badgeClass  = p.estado==='pagado' ? 'b-ok' : p.estado==='pendiente' ? 'b-w' : 'b-d';
-    return '<div class="t-row" style="grid-template-columns:1fr 1.2fr 1fr .7fr .8fr 1fr;background:' + (i%2?'#f9fafb':'#fff') + '">' +
+    var propTitulo  = (p.inquilino && p.inquilino.titulo) ? p.inquilino.titulo : '—';
+    var inqNombre   = (p.inq && p.inq.nombre) ? (p.inq.nombre + ' ' + (p.inq.apellido||'')) : '—';
+    return '<div class="t-row" style="grid-template-columns:' + cols + ';background:' + (i%2?'#f9fafb':'#fff') + '">' +
       '<span style="font-size:13px;font-weight:600">' + sanitize(inqNombre) + '</span>' +
       '<span style="font-size:12px;color:var(--t2)">' + sanitize(propTitulo) + '</span>' +
       '<span style="font-size:15px;font-weight:800;color:var(--pr)">' + formatCOP(p.monto) + '</span>' +
-      '<span style="font-size:12px;color:var(--t2)">' + p.fecha + '</span>' +
-      '<span style="font-size:11px;padding:2px 8px;border-radius:99px;background:#f3f4f6;color:var(--t2)">' + (p.metodo||'—') + '</span>' +
-      '<div style="display:flex;align-items:center;gap:7px">' +
-        '<span class="badge ' + badgeClass + '">' + p.estado.toUpperCase() + '</span>' +
-        (p.estado !== 'pagado' ? '<button style="font-size:11px;color:var(--ac);border:1px solid #a7f3d0;border-radius:7px;padding:3px 8px;background:#f0fdf4;cursor:pointer;font-family:var(--f);font-weight:600" onclick="window.__markPago(\'' + p.id + '\')">✓ Pagar</button>' : '') +
-        '<button style="font-size:11px;color:var(--da);border:1px solid #fecaca;border-radius:7px;padding:3px 7px;background:#fef2f2;cursor:pointer;font-family:var(--f)" onclick="window.__deletePago(\'' + p.id + '\')" title="Eliminar">🗑</button>' +
+      '<span style="font-size:12px;color:var(--t2)">' + sanitize(p.fecha) + '</span>' +
+      '<span style="font-size:11px;padding:2px 8px;border-radius:99px;background:#f3f4f6;color:var(--t2)">' + sanitize(p.metodo||'—') + '</span>' +
+      '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">' +
+        estadoBadge(p.estado) +
+        (p.estado !== 'pagado' ? rowBtn('✓ Pagado', 'window.__markPago(\'' + p.id + '\')', 'ok') : '') +
+        rowBtn('✏️', 'window.__openPagoForm(\'' + p.id + '\')', 'edit') +
+        rowBtn('🗑', 'window.__delPago(\'' + p.id + '\')', 'del') +
       '</div>' +
     '</div>';
   }).join('');
@@ -545,8 +619,8 @@ async function renderPagos(el) {
       kpiCard('📊','#eff3fb','Total', pagos.length) +
     '</div>' +
     '<div class="tbl-wrap" style="margin-top:20px">' +
-      '<div class="t-head" style="grid-template-columns:1fr 1.2fr 1fr .7fr .8fr 1fr">' +
-        '<span>Inquilino</span><span>Propiedad</span><span>Monto</span><span>Fecha</span><span>Método</span><span>Estado</span>' +
+      '<div class="t-head" style="grid-template-columns:' + cols + '">' +
+        '<span>Inquilino</span><span>Propiedad</span><span>Monto</span><span>Fecha</span><span>Método</span><span>Estado / Acciones</span>' +
       '</div>' +
       '<div id="pgb">' + (rows || '<div style="padding:30px;text-align:center;color:var(--t3)">Sin pagos</div>') + '</div>' +
     '</div>';
@@ -554,8 +628,8 @@ async function renderPagos(el) {
 
 // ── Suscripción ────────────────────────────────────────────────
 async function renderSuscripcion(el) {
-  var res    = await fetch('http://localhost:3000/v1/suscripciones/planes').then(function(r){return r.json();}).catch(function(){return{data:[]};});
-  var planes = (res && res.data) ? res.data : [];
+  var res    = await SuscripcionesApi.planes();
+  var planes = (res && res.ok) ? res.data : [];
   var user   = State.session;
 
   var cards = planes.map(function(p) {
@@ -563,7 +637,7 @@ async function renderSuscripcion(el) {
     var color     = PLAN_COLORS[p.id] || '#94a3b8';
     return '<div class="plan-card' + (isCurrent ? ' rec' : '') + '">' +
       (isCurrent ? '<span style="font-size:10.5px;font-weight:700;color:var(--ac)">✓ Tu plan actual</span>' : '') +
-      '<div style="font-size:18px;font-weight:800;color:' + color + '">' + p.nombre + '</div>' +
+      '<div style="font-size:18px;font-weight:800;color:' + color + '">' + sanitize(p.nombre) + '</div>' +
       '<div style="font-size:28px;font-weight:800;color:var(--pr)">' + (p.precio === 0 ? 'Gratis' : formatCOP(p.precio)) + '<span style="font-size:13px;font-weight:400;color:var(--t3)">' + (p.precio ? '/mes' : '') + '</span></div>' +
       '<div style="font-size:12px;color:var(--t2)">' + (p.propsMax ? 'Máx. ' + p.propsMax + ' propiedades' : 'Propiedades ilimitadas') + '</div>' +
       '<button class="' + (isCurrent ? 'btn-g' : 'btn-a') + '" style="margin-top:auto;font-size:13.5px;padding:11px;width:100%" onclick="' +
@@ -618,9 +692,10 @@ export async function saveConfig() {
     apellido: getEl('cfg-a') ? getEl('cfg-a').value.trim() : undefined,
     telefono: getEl('cfg-t') ? getEl('cfg-t').value.trim() : undefined,
   };
-  await UsuariosApi.updateMe(data);
-  if (data.nombre)   State.session.nombre   = data.nombre;
-  if (data.apellido) State.session.apellido = data.apellido;
+  if (!data.nombre) { showToast('El nombre es obligatorio','warning'); return; }
+  const r = await UsuariosApi.updateMe(data);
+  if (!r || !r.ok) { showToast((r && r.error && r.error.message) || 'No se pudo guardar el perfil','error'); return; }
+  Object.assign(State.session, { nombre: r.data.nombre, apellido: r.data.apellido, telefono: r.data.telefono });
   updateSidebarProfile();
   showToast('Perfil guardado ✓','success');
 }
@@ -638,24 +713,28 @@ async function renderFavoritos(el) {
 
 // ── Mis Visitas (inquilino) ────────────────────────────────────
 async function renderMisVisitas(el) {
-  const { VisitasApi } = await import('../api.js');
   var res = await VisitasApi.findMias();
-  var visitas = (res && res.data) ? res.data : (Array.isArray(res) ? res : []);
+  var visitas = (res && res.ok) ? res.data : [];
+  State.visitas = visitas;
 
+  var cols = '2fr 1fr .8fr 1.4fr';
   var rows = visitas.map(function(v, i) {
     var propTitulo = (v.inquilino && v.inquilino.titulo) ? v.inquilino.titulo : '—';
-    return '<div class="t-row" style="grid-template-columns:2fr 1fr 1fr 1fr;background:' + (i%2?'#f9fafb':'#fff') + '">' +
+    return '<div class="t-row" style="grid-template-columns:' + cols + ';background:' + (i%2?'#f9fafb':'#fff') + '">' +
       '<span style="font-size:13px;font-weight:600">' + sanitize(propTitulo) + '</span>' +
-      '<span style="font-size:12.5px;color:var(--t2)">' + v.fecha + '</span>' +
-      '<span style="font-size:12.5px;color:var(--t2)">' + v.hora + '</span>' +
-      '<span class="badge ' + (v.estado==='confirmada'?'b-ok':'b-w') + '">' + v.estado.toUpperCase() + '</span>' +
+      '<span style="font-size:12.5px;color:var(--t2)">' + sanitize(v.fecha) + '</span>' +
+      '<span style="font-size:12.5px;color:var(--t2)">' + sanitize(v.hora) + '</span>' +
+      '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">' +
+        estadoBadge(v.estado) +
+        (v.estado !== 'cancelada' ? rowBtn('Cancelar', 'window.__cancelVisita(\'' + v.id + '\')', 'del') : '') +
+      '</div>' +
     '</div>';
   }).join('');
 
   el.innerHTML =
-    '<div class="topbar"><div><h1 class="pg-title">Mis Visitas</h1><p class="pg-sub">' + visitas.length + ' agendadas</p></div></div>' +
+    '<div class="topbar"><div><h1 class="pg-title">Mis Visitas</h1><p class="pg-sub">' + visitas.length + ' agendadas · solicítalas desde el detalle de una propiedad</p></div></div>' +
     '<div class="tbl-wrap">' +
-      '<div class="t-head" style="grid-template-columns:2fr 1fr 1fr 1fr">' +
+      '<div class="t-head" style="grid-template-columns:' + cols + '">' +
         '<span>Propiedad</span><span>Fecha</span><span>Hora</span><span>Estado</span>' +
       '</div>' +
       (rows || '<div style="padding:30px;text-align:center;color:var(--t3)">Sin visitas agendadas</div>') +
@@ -672,8 +751,8 @@ async function renderMisPagos(el) {
     return '<div class="t-row" style="grid-template-columns:1.5fr 1fr .7fr 1fr;background:' + (i%2?'#f9fafb':'#fff') + '">' +
       '<span style="font-size:13px;font-weight:600">' + sanitize(propTitulo) + '</span>' +
       '<span style="font-size:15px;font-weight:800;color:var(--pr)">' + formatCOP(p.monto) + '</span>' +
-      '<span style="font-size:12.5px;color:var(--t2)">' + p.fecha + '</span>' +
-      '<span class="badge ' + (p.estado==='pagado'?'b-ok':p.estado==='pendiente'?'b-w':'b-d') + '">' + p.estado.toUpperCase() + '</span>' +
+      '<span style="font-size:12.5px;color:var(--t2)">' + sanitize(p.fecha) + '</span>' +
+      estadoBadge(p.estado) +
     '</div>';
   }).join('');
 

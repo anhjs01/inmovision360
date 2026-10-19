@@ -73,10 +73,18 @@ async googleLogin(idToken: string, mode?: string) {
   if (!payload?.email) {
     throw new ApiException(ErrorCode.TOKEN_INVALID, 'Google no devolvió un correo válido', undefined, HttpStatus.UNAUTHORIZED);
   }
- 
+  // Sin correo verificado no se puede vincular ni crear la cuenta por email
+  if (!payload.email_verified) {
+    throw new ApiException(ErrorCode.EMAIL_NOT_VERIFIED, 'Tu correo de Google no está verificado', undefined, HttpStatus.UNAUTHORIZED);
+  }
+
   const email = payload.email.toLowerCase();
   let user = await this.prisma.usuario.findFirst({ where: { googleId: payload.sub } });
- 
+
+  if (user?.deletedAt) {
+    throw new ApiException(ErrorCode.INVALID_CREDENTIALS, 'Esta cuenta fue eliminada', undefined, HttpStatus.UNAUTHORIZED);
+  }
+
   if (user) {
     // Ya tenía cuenta vinculada a Google → si vino del formulario de REGISTRO, es un error
     if (mode === 'register') {
@@ -84,7 +92,11 @@ async googleLogin(idToken: string, mode?: string) {
     }
   } else {
     user = await this.prisma.usuario.findUnique({ where: { email } });
- 
+
+    if (user?.deletedAt) {
+      throw new ApiException(ErrorCode.INVALID_CREDENTIALS, 'Esta cuenta fue eliminada', undefined, HttpStatus.UNAUTHORIZED);
+    }
+
     if (user) {
       // Tenía cuenta con contraseña normal, mismo correo → también es un "ya existe" para registro
       if (mode === 'register') {
@@ -120,6 +132,12 @@ async googleLogin(idToken: string, mode?: string) {
 
   // ── Completar perfil tras login con Google ─────────────────
   async completeProfile(userId: string, dto: CompleteProfileDto) {
+  // Solo se usa una vez (tras el primer login con Google); después el rol no se puede cambiar
+  const current = await this.prisma.usuario.findUnique({ where: { id: userId } });
+  if (current?.perfilCompleto) {
+    throw new ApiException(ErrorCode.PROFILE_ALREADY_DONE, 'Tu perfil ya está completo', undefined, HttpStatus.FORBIDDEN);
+  }
+
   const user = await this.prisma.usuario.update({
     where: { id: userId },
     data: {
@@ -140,7 +158,7 @@ async googleLogin(idToken: string, mode?: string) {
       include: { user: true },
     });
 
-    if (!stored || stored.revoked || stored.expiresAt < new Date()) {
+    if (!stored || stored.revoked || stored.expiresAt < new Date() || stored.user.deletedAt) {
       throw new ApiException(ErrorCode.TOKEN_INVALID, 'Refresh token inválido o expirado', undefined, HttpStatus.UNAUTHORIZED);
     }
 

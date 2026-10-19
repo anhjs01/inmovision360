@@ -121,6 +121,7 @@ function showError(el, msg) {
 }
 
 function launchApp(user) {
+  getEl('complete-profile-modal')?.remove();
   import('./ui.js').then(({ initApp }) => {
     getEl('auth').style.display    = 'none';
     getEl('landing').style.display = 'none';

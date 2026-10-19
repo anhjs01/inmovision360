@@ -8,25 +8,34 @@ import { openAuth, closeAuth, switchAuthTab, togglePasswordVisibility,
          loginDemo, handleLogout, handleCompleteProfile,
          initGoogleButtons } from './modules/auth.js';
 import { showToast, showView, updateBadges, saveConfig,
-         selectMessage }           from './modules/ui.js';
+         selectMessage, refreshView } from './modules/ui.js';
 import { openSoftGate, openDetail, openWompi, openPropertyForm,
-         confirmDeleteProp, openVisitaForm, toggleVisitaEstado,
-         openLeadForm, openPagoForm }   from './modules/modals.js';
+         confirmDeleteProp, openVisitaForm, toggleVisitaEstado, confirmDeleteVisita,
+         openSolicitarVisita, cancelarVisita, openLeadForm, confirmDeleteLead,
+         openPagoForm, confirmDeletePago }   from './modules/modals.js';
 import { State, toggleFav, isFav, getAllProps,
-         getPropById, markPagoAsPaid, loadMe, loadFavs } from './modules/store.js';
+         markPagoAsPaid, loadMe, loadFavs } from './modules/store.js';
 import { getEl, sanitize, formatCOP, CITY_LABELS, AMENITY_LABELS } from './utils.js';
-import { PropiedadesApi } from './api.js';
+import { mediaUrl } from './api.js';
 
 // ── Puentes globales (window.__fn) ────────────────────────────
 window.__openAuth        = openAuth;
 window.__openForm        = openPropertyForm;
 window.__confirmDel      = confirmDeleteProp;
 window.__openDetail      = openDetail;
-window.__openVisitaForm  = openVisitaForm;
+window.__openVisitaForm  = (id) => openVisitaForm(id || null);
 window.__toggleVisita    = toggleVisitaEstado;
-window.__openLeadForm    = openLeadForm;
-window.__openPagoForm    = openPagoForm;
-window.__markPago        = markPagoAsPaid;
+window.__delVisita       = confirmDeleteVisita;
+window.__solicitarVisita = openSolicitarVisita;
+window.__cancelVisita    = cancelarVisita;
+window.__openLeadForm    = (id) => openLeadForm(id || null);
+window.__delLead         = confirmDeleteLead;
+window.__openPagoForm    = (id) => openPagoForm(id || null);
+window.__delPago         = confirmDeletePago;
+window.__markPago        = async (id) => {
+  if (await markPagoAsPaid(id)) { showToast('Pago marcado como pagado ✓','success'); await refreshView(); }
+  else showToast('No se pudo actualizar el pago','error');
+};
 window.__openWompi       = openWompi;
 window.__toast           = showToast;
 window.__logout          = handleLogout;
@@ -61,7 +70,7 @@ let pubFilter   = { tipo:'', ciudad:'', q:'', tourOnly:false };
 let pubSort     = 'default';
 
 function renderPublicCard(p) {
-  const photos = p.fotos ?? [];
+  const photos = (p.fotos ?? []).map(mediaUrl);
   const sk     = 's' + p.id;
   if (!(sk in cardSlide)) cardSlide[sk] = 0;
   const cur    = cardSlide[sk];

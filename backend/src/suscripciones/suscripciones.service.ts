@@ -1,5 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, HttpStatus } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { ApiException }  from '../common/filters/http-exception.filter';
+import { ErrorCode }     from '../common/constants/error-codes';
 
 @Injectable()
 export class SuscripcionesService {
@@ -17,7 +19,11 @@ export class SuscripcionesService {
     return { plan: user?.plan ?? 'free', nombre: plan?.nombre ?? 'Free', estado: sus?.estado ?? 'activo', vence: sus?.vence ?? null, props_activas: props, props_max: plan?.propsMax ?? null };
   }
 
+  // Modo demo: el plan se activa de inmediato (el webhook de Wompi lo confirmaría en producción)
   async suscribirse(userId: string, planId: string, metodo: string) {
+    const plan = await this.prisma.plan.findUnique({ where: { id: planId } });
+    if (!plan) throw new ApiException(ErrorCode.PLAN_NOT_FOUND, 'Plan no encontrado', 'plan_id', HttpStatus.NOT_FOUND);
+
     const ref   = `SUB_${planId}_${Date.now()}`;
     const url   = `https://checkout.wompi.co/p/?public-key=pub_stagtest_&reference=${ref}&currency=COP`;
     const vence = new Date(); vence.setDate(vence.getDate() + 30);

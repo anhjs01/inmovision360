@@ -36,23 +36,34 @@ export async function toggleFav(pid) { const r = await FavoritosApi.toggle(pid);
 export function isFav(pid) { return State.favIds.includes(pid); }
 export async function getFavProps() { const r = await FavoritosApi.findAll(); return r?.ok ? r.data : []; }
 
+// Devuelve r.data o lanza el mensaje de error del backend
+function unwrap(r) { if (r?.ok) return r.data; throw new Error(r?.error?.message ?? 'Error'); }
+function replaceIn(list, item) { const i = list.findIndex(x => x.id === item.id); if (i !== -1) list[i] = item; }
+
 // Visitas
 export async function getMyVisitas(e) { const r = await VisitasApi.findAll(e); if (r?.ok) { State.visitas = r.data; return r.data; } return []; }
-export async function addVisita(dto) { const r = await VisitasApi.createManual(dto); if (r?.ok) { State.visitas.unshift(r.data); return r.data; } throw new Error(r?.error?.message ?? 'Error'); }
-export async function updateVisitaEstado(id, e) { const r = await VisitasApi.updateEstado(id, e); if (r?.ok) { const v = State.visitas.find(v => v.id === id); if (v) v.estado = e; } return r?.data ?? null; }
+export async function addVisita(dto) { const v = unwrap(await VisitasApi.createManual(dto)); State.visitas.unshift(v); return v; }
+export async function solicitarVisita(dto) { return unwrap(await VisitasApi.create(dto)); }
+export async function updateVisita(id, dto) { const v = unwrap(await VisitasApi.update(id, dto)); replaceIn(State.visitas, v); return v; }
+export async function updateVisitaEstado(id, e) { const v = unwrap(await VisitasApi.updateEstado(id, e)); replaceIn(State.visitas, v); return v; }
+export async function deleteVisita(id) { unwrap(await VisitasApi.remove(id)); State.visitas = State.visitas.filter(v => v.id !== id); }
 
 // Pagos
 export async function getMyPagos() { const r = State.session?.rol === 'inquilino' ? await PagosApi.findMios() : await PagosApi.findAll(); if (r?.ok) { State.pagos = r.data; return r.data; } return []; }
+export async function addPago(dto) { const p = unwrap(await PagosApi.create(dto)); State.pagos.unshift(p); return p; }
+export async function updatePago(id, dto) { const p = unwrap(await PagosApi.update(id, dto)); replaceIn(State.pagos, p); return p; }
+export async function deletePago(id) { unwrap(await PagosApi.remove(id)); State.pagos = State.pagos.filter(p => p.id !== id); }
 export async function markPagoAsPaid(id) { const r = await PagosApi.updateEstado(id, 'pagado'); if (r?.ok) { const p = State.pagos.find(p => p.id === id); if (p) p.estado = 'pagado'; } return r?.ok; }
 
-// Mensajes
+// Mensajes (conversaciones agrupadas por usuario)
 export async function getMensajes() { const r = await MensajesApi.findAll(); if (r?.ok) { State.mensajes = r.data; return r.data; } return []; }
 export async function getUnreadCount() { const r = await MensajesApi.unreadCount(); return r?.data?.count ?? 0; }
-export async function markMensajeRead(id) { await MensajesApi.markRead(id); const m = State.mensajes.find(m => m.id === id); if (m) m.leido = true; }
 
 // Leads
 export async function getLeads() { const r = await LeadsApi.findAll(); if (r?.ok) { State.leads = r.data; return r.data; } return []; }
-export async function addLead(dto) { const r = await LeadsApi.create(dto); if (r?.ok) { State.leads.unshift(r.data); return r.data; } throw new Error(r?.error?.message ?? 'Error'); }
+export async function addLead(dto) { const l = unwrap(await LeadsApi.create(dto)); State.leads.unshift(l); return l; }
+export async function updateLead(id, dto) { const l = unwrap(await LeadsApi.update(id, dto)); replaceIn(State.leads, l); return l; }
+export async function deleteLead(id) { unwrap(await LeadsApi.remove(id)); State.leads = State.leads.filter(l => l.id !== id); }
 
 // KPIs
 export async function getKPIs() { const r = await EstadisticasApi.kpis(); return r?.data ?? { props_activas: 0, visitas_total: 0, ingresos_mes: 0, mensajes_nuevos: 0, leads_activos: 0 }; }

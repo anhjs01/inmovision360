@@ -9,6 +9,7 @@ import {
 
 import { MensajesService } from './mensajes.service';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { SendMensajeDto } from './dto/mensaje.dto';
 
 @Controller('mensajes')
 export class MensajesController {
@@ -60,7 +61,7 @@ export class MensajesController {
   @Post()
   send(
     @CurrentUser() u: any,
-    @Body() b: any,
+    @Body() b: SendMensajeDto,
   ) {
     return this.svc.send(
       u.id,
@@ -71,7 +72,11 @@ export class MensajesController {
   @Patch(':id/leido')
   markRead(
     @Param('id') id: string,
+    @CurrentUser() u: any,
   ) {
-    return this.svc.markRead(id);
+    return this.svc.markRead(
+      id,
+      u.id,
+    );
   }
 }

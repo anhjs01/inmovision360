@@ -2,7 +2,7 @@ import { NestFactory }         from '@nestjs/core';
 import { ValidationPipe }      from '@nestjs/common';
 import { ConfigService }       from '@nestjs/config';
 import { AppModule }           from './app.module';
-import { join }                from 'path';
+import { UPLOAD_DIR }          from './common/utils/uploads';
 import { NestExpressApplication } from '@nestjs/platform-express';
 
 async function bootstrap() {
@@ -20,7 +20,10 @@ async function bootstrap() {
   app.setGlobalPrefix('v1');
 
   // Archivos subidos (fotos locales)
-  app.useStaticAssets(join(process.cwd(), 'uploads'), { prefix: '/uploads' });
+  app.useStaticAssets(UPLOAD_DIR, {
+    prefix:     '/uploads',
+    setHeaders: (res) => res.setHeader('X-Content-Type-Options', 'nosniff'),
+  });
 
   // Validación de DTOs
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: false }));
