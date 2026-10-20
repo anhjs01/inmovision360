@@ -21,6 +21,22 @@ export function safeUrl(url) {
   return typeof url === 'string' && /^https?:\/\//i.test(url.trim()) ? url.trim() : '';
 }
 
+// ── WhatsApp ─────────────────────────────────────────────────
+// Número de atención al cliente en formato internacional, solo dígitos (57 + celular)
+export const WHATSAPP_SOPORTE = '573105550101';
+
+// "+57 310 555 0101", "3105550101" → "573105550101"; '' si no es un número válido
+export function waNumber(phone) {
+  const d = String(phone ?? '').replace(/\D/g, '');
+  if (/^3\d{9}$/.test(d)) return '57' + d;          // celular colombiano sin indicativo
+  return d.length >= 11 && d.length <= 15 ? d : '';  // ya trae indicativo de país
+}
+
+export function waLink(phone, text) {
+  const n = waNumber(phone);
+  return n ? `https://wa.me/${n}?text=${encodeURIComponent(text)}` : '';
+}
+
 // ── Formateadores numéricos (es-CO: miles con punto, decimales con coma) ──
 export function formatNum(value, decimals = 0) {
   const n = Number(value);

@@ -178,6 +178,26 @@ export async function apiUpload(
     }));
 }
 
+// ── Descarga de archivos privados (comprobantes) ──────────────
+// Devuelve { ok, blob } o { ok:false, error }; los archivos privados necesitan el token
+export async function apiBlob(path, retry = true) {
+  const token = getToken();
+  const res = await fetch(`${BASE_URL}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+
+  if (res.status === 401 && retry && await doRefresh()) {
+    return apiBlob(path, false);
+  }
+
+  if (!res.ok) {
+    const json = await res.json().catch(() => null);
+    return { ok: false, error: json?.error || { message: 'No se pudo descargar el archivo' } };
+  }
+
+  return { ok: true, blob: await res.blob() };
+}
+
 // ── URLs de archivos subidos ──────────────────────────────────
 // El backend guarda rutas relativas (/uploads/…); el frontend corre en otro
 // origen (Live Server :5500), así que hay que anteponer el origen de la API.
@@ -542,6 +562,29 @@ export const PagosApi = {
       'DELETE',
       `/pagos/${id}`
     ),
+
+  // Inquilino: reporta un pago hecho por fuera de la plataforma
+  reportar: (dto) =>
+    apiFetch(
+      'POST',
+      '/pagos/reportar',
+      dto
+    ),
+
+  subirComprobante: (id, file) => {
+    const fd = new FormData();
+    fd.append('comprobante', file);
+    return apiUpload(`/pagos/${id}/comprobante`, fd);
+  },
+
+  quitarComprobante: (id) =>
+    apiFetch(
+      'DELETE',
+      `/pagos/${id}/comprobante`
+    ),
+
+  comprobante: (id) =>
+    apiBlob(`/pagos/${id}/comprobante`),
 
   iniciarWompi: (pagoId) =>
     apiFetch(

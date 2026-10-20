@@ -340,6 +340,9 @@
 .vt { padding: 9px 16px; border-radius: 9px; font-size: 13px; font-weight: 600; color: var(--t2); white-space: nowrap; transition: .15s; }
 .vt:hover { color: var(--t1); }
 .vt.active { background: #fff; color: var(--pr); box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+/* Las vistas son columnas flex con scroll propio: sin esto, los bloques con overflow
+   (pestañas, tablas) se encogen cuando el contenido es alto y quedan cortados/inclicables */
+.view > .view-tabs, .view > .tbl-wrap { flex-shrink: 0; }
 .fb-chip.fb-clear { border-style: dashed; color: var(--da); border-color: #fecaca; }
 .fb-chip.fb-clear:hover { background: var(--da); border-color: var(--da); color: #fff; }
 
@@ -1003,3 +1006,84 @@
 
 .fstep-pane        { display: none; }
 .fstep-pane.active { display: block; }
+
+/* ── WhatsApp ───────────────────────────────────────────────── */
+.btn-wa {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 11px 14px; border-radius: 10px; font-size: 13.5px; font-weight: 700;
+  background: #25d366; color: #fff; text-decoration: none; transition: background .15s, transform .15s;
+  box-shadow: 0 4px 14px rgba(37,211,102,.3);
+}
+.btn-wa:hover { background: #1ebe5a; transform: translateY(-1px); }
+
+.wa-float {
+  position: fixed; right: 22px; bottom: 22px; z-index: 350;   /* debajo de los modales (400+) */
+  display: flex; align-items: center; gap: 10px; text-decoration: none;
+}
+.wa-float-btn {
+  width: 58px; height: 58px; border-radius: 50%; display: grid; place-items: center;
+  background: #25d366; color: #fff; box-shadow: 0 8px 24px rgba(37,211,102,.45);
+  transition: transform .2s; animation: waPulse 2.6s ease-in-out infinite;
+}
+.wa-float-btn svg { width: 30px; height: 30px; }
+.wa-float:hover .wa-float-btn { transform: scale(1.08); }
+.wa-float-lbl {
+  padding: 9px 14px; border-radius: 12px; background: #fff; color: var(--t1); font-size: 13px;
+  box-shadow: 0 6px 20px rgba(0,0,0,.14); white-space: nowrap;
+  opacity: 0; transform: translateX(8px); transition: .2s; pointer-events: none;
+}
+.wa-float:hover .wa-float-lbl, .wa-float:focus-visible .wa-float-lbl { opacity: 1; transform: none; }
+@keyframes waPulse {
+  0%, 100% { box-shadow: 0 8px 24px rgba(37,211,102,.45), 0 0 0 0 rgba(37,211,102,.45); }
+  50%      { box-shadow: 0 8px 24px rgba(37,211,102,.45), 0 0 0 10px rgba(37,211,102,0); }
+}
+@media (prefers-reduced-motion: reduce) { .wa-float-btn { animation: none; } }
+/* En el chat el compositor ocupa la esquina inferior */
+body[data-view="mensajes"] .wa-float { display: none; }
+@media (max-width: 600px) {
+  .wa-float { right: 14px; bottom: 14px; }
+  .wa-float-btn { width: 52px; height: 52px; }
+  .wa-float-lbl { display: none; }
+}
+/* Los toasts propios (sin SweetAlert2) quedan encima del botón */
+#toast-wrap { bottom: 96px; }
+
+/* ── Comprobantes de pago ───────────────────────────────────── */
+.comp-drop { width: 100%; padding: 16px; border: 1.5px dashed var(--bo); border-radius: 12px; background: #f9fafb; color: var(--t2); font-size: 13px; font-weight: 600; cursor: pointer; font-family: var(--f); transition: .15s; }
+.comp-drop:hover { border-color: var(--ac); color: var(--ac); background: #f0fdf4; }
+.comp-prev { display: flex; align-items: center; gap: 12px; padding: 10px; border: 1.5px solid var(--bo); border-radius: 12px; background: #fff; }
+.comp-prev .btn-g { padding: 7px 12px; font-size: 12px; }
+.comp-thumb { width: 64px; height: 64px; flex-shrink: 0; border-radius: 8px; object-fit: cover; background: #f3f4f6; border: 1px solid var(--bo); }
+.comp-pdf { display: grid; place-items: center; font-size: 15px; font-weight: 800; color: #dc2626; background: #fef2f2; border-color: #fecaca; }
+.comp-info { flex: 1; min-width: 0; }
+.comp-name { font-size: 13px; font-weight: 600; color: var(--t1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.comp-size { font-size: 11.5px; color: var(--t3); margin-top: 2px; }
+.comp-link { background: none; border: none; padding: 0; margin-top: 2px; color: var(--ac); font-size: 12px; font-weight: 600; cursor: pointer; font-family: var(--f); }
+.comp-link:hover { text-decoration: underline; }
+.comp-viewer { max-width: 760px; width: 100%; }
+.comp-view-body { padding: 18px 24px; display: grid; place-items: center; background: #f3f4f6; }
+.comp-view-body img { max-width: 100%; max-height: 65vh; border-radius: 8px; box-shadow: var(--sh); }
+.comp-view-body iframe { width: 100%; height: 65vh; border: none; border-radius: 8px; background: #fff; }
+.comp-viewer .mf-foot a { text-decoration: none; }
+@media (max-width: 600px) {
+  .comp-view-body { padding: 12px; }
+  .comp-prev { flex-wrap: wrap; }
+}
+
+/* Los toasts de SweetAlert2 no bloquean clics: suelen quedar sobre botones de la barra superior */
+.swal2-container.swal2-top-end, .swal2-toast { pointer-events: none !important; }
+
+/* ── Buscador de propiedades (combo box) ────────────────────── */
+.pcombo { position: relative; }
+.pcombo .pc-input { width: 100%; padding-right: 36px; }
+.pcombo .pc-input.pc-ok { border-color: var(--ac); background: #f0fdf4; font-weight: 600; }
+.pc-clear { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); width: 24px; height: 24px; border-radius: 50%; border: none; background: #e5e7eb; color: var(--t2); font-size: 11px; cursor: pointer; }
+.pc-clear:hover { background: #fee2e2; color: var(--da); }
+.pc-list { position: absolute; z-index: 5; left: 0; right: 0; top: calc(100% + 4px); max-height: 270px; overflow-y: auto; margin: 0; padding: 6px; list-style: none; background: #fff; border: 1px solid var(--bo); border-radius: 12px; box-shadow: 0 12px 32px rgba(0,0,0,.14); }
+.pc-group { padding: 8px 10px 4px; font-size: 10.5px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--t3); }
+.pc-opt { padding: 8px 10px; border-radius: 8px; cursor: pointer; }
+.pc-opt.act, .pc-opt:hover { background: #eff3fb; }
+.pc-opt.sel .pc-tit::after { content: ' ✓'; color: var(--ac); }
+.pc-tit { font-size: 13.5px; font-weight: 600; color: var(--t1); }
+.pc-sub { font-size: 11.5px; color: var(--t3); margin-top: 1px; }
+.pc-empty { padding: 14px 10px; font-size: 13px; color: var(--t3); text-align: center; }

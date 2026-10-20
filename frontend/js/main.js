@@ -13,10 +13,12 @@ import { openSoftGate, openDetail, openWompi, openPropertyForm,
          confirmDeleteProp, openVisitaForm, toggleVisitaEstado, confirmDeleteVisita,
          openSolicitarVisita, cancelarVisita, openLeadForm, confirmDeleteLead,
          openPagoForm, confirmDeletePago, openPlanCheckout, confirmCancelPlan,
-         pagarPago, openTourViewer, openPlanoCheckout }   from './modules/modals.js';
+         pagarPago, openTourViewer, openPlanoCheckout, WA_ICON,
+         openReportarPago, openComprobante, adjuntarComprobante } from './modules/modals.js';
 import { State, toggleFav, isFav, getAllProps,
          markPagoAsPaid, loadMe, loadFavs } from './modules/store.js';
-import { getEl, sanitize, formatCOP, formatNum, CITY_LABELS, AMENITY_LABELS } from './utils.js';
+import { getEl, sanitize, formatCOP, formatNum, CITY_LABELS, AMENITY_LABELS,
+         waLink, WHATSAPP_SOPORTE } from './utils.js';
 import { mediaUrl } from './api.js';
 
 // ── Puentes globales (window.__fn) ────────────────────────────
@@ -42,6 +44,9 @@ window.__openPlan        = openPlanCheckout;
 window.__openPlano       = openPlanoCheckout;
 window.__cancelPlan      = confirmCancelPlan;
 window.__pagarPago       = pagarPago;
+window.__reportarPago    = openReportarPago;
+window.__verComprobante  = openComprobante;
+window.__adjuntarComprobante = adjuntarComprobante;
 window.__openTour        = openTourViewer;
 window.__toast           = showToast;
 window.__logout          = handleLogout;
@@ -69,6 +74,21 @@ window.__toggleFavBtn = async (propId, btn) => {
   if (added) showToast('Guardado en favoritos ❤️','success');
   await updateBadges();
 };
+
+// ── Widget flotante de WhatsApp (atención al cliente) ─────────
+function mountWhatsAppWidget() {
+  if (getEl('wa-float')) return;
+  const a = document.createElement('a');
+  a.id        = 'wa-float';
+  a.className = 'wa-float';
+  a.href      = waLink(WHATSAPP_SOPORTE, 'Hola 👋, necesito ayuda con INMOVISIÓN 360.');
+  a.target    = '_blank';
+  a.rel       = 'noopener noreferrer';
+  a.setAttribute('aria-label', 'Atención al cliente por WhatsApp');
+  a.innerHTML = `<span class="wa-float-lbl">¿Necesitas ayuda? <strong>Escríbenos</strong></span><span class="wa-float-btn">${WA_ICON}</span>`;
+  document.body.appendChild(a);
+}
+mountWhatsAppWidget();
 
 // ── Catálogo público (landing) ────────────────────────────────
 const cardSlide = {};

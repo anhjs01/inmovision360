@@ -4,7 +4,7 @@
 'use strict';
 
 import { login, register, logout, loadMe, loginGoogle, completeProfile, State } from './store.js';
-import { showToast }   from './ui.js';
+import { showToast, showErrorAlert } from './ui.js';
 import { getEl, sanitize } from '../utils.js';
 import { AuthApi }     from '../api.js';
 
@@ -65,12 +65,13 @@ export async function handleLogin() {
   btn.disabled = true; btn.textContent = '⏳ Ingresando...';
   try {
     const user = await login(email, pass);
-    if (!user) { showError(errEl, 'Email o contraseña incorrectos'); return; }
+    if (!user) { showError(errEl, 'Email o contraseña incorrectos'); showErrorAlert('No pudimos iniciar sesión', 'Email o contraseña incorrectos. Verifica tus datos e intenta de nuevo.'); return; }
     errEl.style.display = 'none';
     getEl('l-pass').value = '';
     launchApp(user);
   } catch (e) {
     showError(errEl, 'Error de conexión con el servidor');
+    showErrorAlert('Sin conexión', 'No se pudo conectar con el servidor. ¿El backend está corriendo?');
   } finally {
     btn.disabled = false; btn.textContent = label;
   }
@@ -93,12 +94,13 @@ export async function handleRegister() {
     const [primerNombre, ...resto] = nombre.split(' ');
     const r = await register({ nombre: primerNombre, apellido: resto.join(' ') || '', email, pass, rol: rolEl.value });
     // Se muestra el mensaje real del backend (email repetido, email inválido, etc.)
-    if (r.error) { showError(errEl, r.error); return; }
+    if (r.error) { showError(errEl, r.error); showErrorAlert('No pudimos crear tu cuenta', r.error); return; }
     errEl.style.display = 'none';
     getEl('r-pass').value = '';
     launchApp(r.user);
   } catch (e) {
     showError(errEl, 'Error de conexión con el servidor');
+    showErrorAlert('Sin conexión', 'No se pudo conectar con el servidor. ¿El backend está corriendo?');
   } finally {
     btn.disabled = false; btn.textContent = label;
   }
@@ -110,7 +112,7 @@ export async function loginDemo(rol) {
   showToast(`Iniciando demo ${rol}…`, 'info');
   const user = await login(c.email, c.pass);
   if (user) launchApp(user);
-  else showToast('Error al iniciar demo. ¿El backend está corriendo?', 'error');
+  else showErrorAlert('No se pudo iniciar la demo', '¿El backend está corriendo y la base tiene los datos demo (npm run db:seed)?');
 }
 
 export async function handleLogout() {
@@ -141,7 +143,7 @@ export async function handleGoogleCredential(response) {
   const mode = getEl('form-register')?.style.display === 'flex' ? 'register' : 'login';
   try {
     const result = await loginGoogle(response.credential, mode);
-    if (result.error) { showToast(result.error, 'error'); return; }
+    if (result.error) { showErrorAlert('Error con Google', result.error); return; }
     if (result.needsProfile) {
       const { openCompleteProfileModal } = await import('./modals.js');
       openCompleteProfileModal(result.user);
@@ -149,7 +151,7 @@ export async function handleGoogleCredential(response) {
       launchApp(result.user);
     }
   } catch (e) {
-    showToast('Error de conexión con Google', 'error');
+    showErrorAlert('Error de conexión con Google', 'Intenta de nuevo en unos segundos.');
   }
 }
 

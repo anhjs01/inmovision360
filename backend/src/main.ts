@@ -19,6 +19,9 @@ async function bootstrap() {
   // Prefijo global de rutas
   app.setGlobalPrefix('v1');
 
+  // Los comprobantes de pago son privados: nunca se sirven como estáticos
+  app.use('/uploads/comprobantes', (_req, res) => res.status(404).end());
+
   // Archivos subidos (fotos locales)
   app.useStaticAssets(UPLOAD_DIR, {
     prefix:     '/uploads',

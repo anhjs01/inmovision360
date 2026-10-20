@@ -173,6 +173,8 @@ model Pago {
   metodo      String?
   concepto    String?                        // ej. canon, administración, depósito
   wompiRef    String?
+  comprobanteUrl String?                     // /uploads/comprobantes/<uuid>.<ext>, servido solo vía GET /pagos/:id/comprobante
+  origen      String   @default("arrendador") // arrendador (registrado) | inquilino (reportado)
   createdAt   DateTime @default(now())
 
   inquilino Propiedad @relation(fields: [propId],      references: [id], onDelete: Cascade)

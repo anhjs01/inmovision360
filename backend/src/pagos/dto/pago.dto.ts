@@ -33,3 +33,12 @@ export class UpdatePagoEstadoDto {
 export class IniciarWompiDto {
   @IsString() pago_id: string;
 }
+
+// Pago reportado por el inquilino: queda pendiente hasta que el arrendador lo confirme
+export class ReportarPagoDto {
+  @IsString()                                                  propId: string;
+  @IsInt() @Min(1) @Max(MONTO_MAX)                             monto: number;
+  @Matches(FECHA, { message: 'Fecha inválida (AAAA-MM-DD)' })   fecha: string;
+  @IsOptional() @IsString() @MaxLength(30)                     metodo?: string;
+  @IsOptional() @IsString() @MaxLength(80)                     concepto?: string;
+}

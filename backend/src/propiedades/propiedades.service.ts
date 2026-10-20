@@ -64,10 +64,22 @@ export class PropiedadesService {
   }
 
   // ── Una propiedad ──────────────────────────────────────────
-  async findOne(id: string) {
-    const prop = await this.prisma.propiedad.findFirst({ where: { id, deletedAt: null } });
+  // conContacto: solo usuarios con sesión reciben el teléfono del arrendador
+  async findOne(id: string, conContacto = false) {
+    const prop = await this.prisma.propiedad.findFirst({
+      where:   { id, deletedAt: null },
+      include: { owner: { select: { nombre: true, apellido: true, telefono: true, verified: true } } },
+    });
     if (!prop) throw new ApiException(ErrorCode.PROP_NOT_FOUND, 'Propiedad no encontrada', undefined, HttpStatus.NOT_FOUND);
-    return parsePropArrays(prop);
+    const { owner, ...rest } = prop;
+    return {
+      ...parsePropArrays(rest),
+      contacto: {
+        nombre:   [owner?.nombre, owner?.apellido].filter(Boolean).join(' '),
+        verified: !!owner?.verified,
+        telefono: conContacto ? owner?.telefono ?? null : null,
+      },
+    };
   }
 
   // ── Mis propiedades ────────────────────────────────────────

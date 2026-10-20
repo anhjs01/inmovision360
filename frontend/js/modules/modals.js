@@ -7,15 +7,17 @@ import { State, addProp, updateProp, deleteProp, getPropById,
          getMyProps, toggleFav, isFav, addVisita, updateVisita, updateVisitaEstado,
          deleteVisita, solicitarVisita, addLead, updateLead, deleteLead,
          addPago, updatePago, deletePago, markPagoAsPaid,
+         reportarPago, subirComprobante, quitarComprobante, getPropsReportables,
          getPlanes, suscribirse, cancelarPlan } from './store.js';
-import { showToast, refreshView, updateBadges, updateSidebarProfile, addPlanoSolicitado } from './ui.js';
-import { sanitize, formatCOP, formatNum, parseCOP, capitalize, getEl, safeUrl,
+import { showToast, showErrorAlert, refreshView, updateBadges, updateSidebarProfile, addPlanoSolicitado } from './ui.js';
+import { sanitize, formatCOP, formatNum, formatFecha, parseCOP, capitalize, getEl, safeUrl, waLink, WHATSAPP_SOPORTE,
          CITY_LABELS, AMENITY_LABELS, LISTING_LABELS } from '../utils.js';
 import { MensajesApi, PropiedadesApi, PagosApi, mediaUrl } from '../api.js';
 
 const MAX_FOTOS      = 20;
 const MAX_FOTO_BYTES = 5 * 1024 * 1024;
 const FOTO_TYPES     = ['image/jpeg', 'image/png', 'image/webp'];
+const COMPROBANTE_TYPES = [...FOTO_TYPES, 'application/pdf'];
 
 // ── Helper: crear overlay ─────────────────────────────────────
 function createOverlay() {
@@ -27,7 +29,16 @@ function createOverlay() {
 }
 
 // ── Helper: diálogo de confirmación (devuelve Promise<boolean>) ──
+// message puede traer HTML: quien llama debe pasar los datos por sanitize()
 export function confirmDialog(title, message, okLabel = 'Eliminar') {
+  if (window.Swal) {
+    return window.Swal.fire({
+      icon: 'warning', titleText: title, html: message,
+      showCancelButton: true, confirmButtonText: okLabel, cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#ef4444', cancelButtonColor: '#6b7280',
+      reverseButtons: true, focusCancel: true,
+    }).then(r => r.isConfirmed);
+  }
   return new Promise(resolve => {
     const ov = createOverlay();
     ov.innerHTML = `
@@ -59,7 +70,8 @@ function propOptions(props, selectedId) {
   return props.map(p => `<option value="${p.id}"${p.id === selectedId ? ' selected' : ''}>${sanitize(p.titulo)}</option>`).join('');
 }
 
-function today() { return new Date().toISOString().slice(0, 10); }
+// Fecha local AAAA-MM-DD (toISOString usa UTC: en Colombia después de las 7 p. m. daría el día siguiente)
+function today() { const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); }
 
 // Formatea un input de dinero con separador de miles mientras se escribe (1800000 → 1.800.000)
 function bindMoneyInput(input) {
@@ -98,7 +110,9 @@ export async function openSoftGate(propId) {
 
 // ── Detalle de propiedad ──────────────────────────────────────
 export async function openDetail(propId) {
-  const prop = await getPropById(propId);
+  // Se pide al backend para traer el contacto del arrendador (la caché del listado no lo incluye)
+  const fresh = await PropiedadesApi.findOne(propId).catch(() => null);
+  const prop  = fresh?.ok ? fresh.data : await getPropById(propId);
   if (!prop) { showToast('Propiedad no encontrada','error'); return; }
 
   const photos    = (prop.fotos ?? []).map(mediaUrl);
@@ -195,8 +209,11 @@ export async function openDetail(propId) {
           ${!esPropia?`<button class="btn-p" style="background:#0f172a" onclick="window.__sendMsg('${prop.id}','${prop.ownerId}')">💬 Contactar arrendador</button>`:''}
           <button id="det-fav-btn" style="padding:10px;border-radius:10px;border:1.5px solid #fed7aa;background:#fff8ed;color:var(--wa);font-size:13px;font-weight:600;cursor:pointer;font-family:var(--f)"
             onclick="window.__toggleFavDetail('${prop.id}',this)">${isFav(prop.id)?'❤️ En favoritos':'🤍 Guardar'}</button>
+          ${!esPropia ? `<a class="btn-wa" href="${sanitize(waPropiedad(prop))}" target="_blank" rel="noopener noreferrer">${WA_ICON} Escribir por WhatsApp</a>` : ''}
           <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--bo);font-size:12px;color:var(--t3);line-height:2">
-            📞 +57 310 555 0101<br>📧 arrendador@inmovision360.co<br><span style="color:var(--ac);font-weight:600">✅ Verificado</span>
+            👤 ${sanitize(prop.contacto?.nombre || 'Arrendador')}<br>
+            ${prop.contacto?.telefono ? `📞 ${sanitize(prop.contacto.telefono)}<br>` : '<span>📞 Contacto vía INMOVISIÓN 360</span><br>'}
+            ${prop.contacto?.verified ? '<span style="color:var(--ac);font-weight:600">✅ Verificado</span>' : ''}
           </div>
         </div>
       </div>
@@ -232,6 +249,18 @@ export async function openDetail(propId) {
     const ctr = ov.querySelector('#foto-counter');
     if (ctr) ctr.textContent=`${activePhoto+1} / ${photos.length}`;
   }
+}
+
+// ── WhatsApp ──────────────────────────────────────────────────
+export const WA_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>';
+
+// Chat con el arrendador (o con soporte si no registró teléfono), con el título de la propiedad
+function waPropiedad(prop) {
+  const ciudad  = CITY_LABELS[prop.ciudad] ?? prop.ciudad;
+  const nombre  = (prop.contacto?.nombre || '').split(' ')[0];
+  const texto   = `Hola${nombre ? ' ' + nombre : ''} 👋, vi en INMOVISIÓN 360 la propiedad "${prop.titulo}" ` +
+                  `(${ciudad}, ${formatCOP(prop.precio)} ${prop.listing === 'sale' ? 'COP' : 'COP/mes'}) y me gustaría recibir más información.`;
+  return waLink(prop.contacto?.telefono, texto) || waLink(WHATSAPP_SOPORTE, texto);
 }
 
 window.__toggleFavDetail = async (propId, btn) => {
@@ -892,7 +921,6 @@ export async function confirmDeleteLead(leadId) {
 export async function openPagoForm(pagoId = null) {
   const p       = pagoId ? (State.pagos || []).find(x => x.id === pagoId) : null;
   const myProps = await getMyProps();
-  const metodos = ['PSE','Nequi','Daviplata','Tarjeta','Efectivo'];
   const ov = createOverlay();
 
   ov.innerHTML = `
@@ -900,19 +928,19 @@ export async function openPagoForm(pagoId = null) {
       <div class="mh"><div><div class="mh-title">${p ? '✏️ Editar pago' : 'Registrar pago'}</div></div><button class="btn-mx" id="pgx">✕</button></div>
       <div style="padding:24px 28px;display:flex;flex-direction:column;gap:16px">
         <div class="mf"><label>Inquilino (nombre o email) <span style="font-weight:400;color:var(--t3)">— opcional</span></label><input id="pgi" placeholder="Vacío = pago directo / general" value="${sanitize(p?.inq?.email ?? '')}"/></div>
-        <div class="mf"><label>Propiedad *</label><select id="pgp"><option value="">Selecciona…</option>${propOptions(myProps, p?.propId)}</select></div>
-        <div class="mf"><label>Concepto <span style="font-weight:400;color:var(--t3)">— opcional</span></label><input id="pgcon" maxlength="80" list="pg-conceptos" placeholder="Ej: Canon de arriendo, Administración, Depósito" value="${sanitize(p?.concepto ?? '')}"/>
-          <datalist id="pg-conceptos"><option value="Canon de arriendo"><option value="Administración"><option value="Depósito"><option value="Servicios públicos"><option value="Reparaciones"></datalist></div>
+        <div class="mf"><label>Propiedad *</label>${propComboHtml('pgp')}</div>
+        ${conceptoFieldHtml('pgcon', p?.concepto ?? '', true)}
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
           <div class="mf"><label>Monto (COP) *</label><input id="pgm" inputmode="numeric" autocomplete="off" placeholder="1.800.000" value="${p?.monto ? formatNum(p.monto) : ''}"/></div>
           <div class="mf"><label>Fecha *</label><input id="pgf" type="date" value="${sanitize(p?.fecha ?? today())}"/></div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
-          <div class="mf"><label>Método</label><select id="pgmet">${metodos.map(m => `<option${p?.metodo===m?' selected':''}>${m}</option>`).join('')}</select></div>
+          <div class="mf"><label>Método</label><select id="pgmet">${metodoOptions(p?.metodo)}</select></div>
           <div class="mf"><label>Estado</label><select id="pge">
             ${[['pagado','Pagado'],['pendiente','Pendiente'],['vencido','Vencido']].map(([val,lbl]) => `<option value="${val}"${p?.estado===val?' selected':''}>${lbl}</option>`).join('')}
           </select></div>
         </div>
+        ${comprobanteFieldHtml()}
       </div>
       <div class="mf-foot">
         <button class="btn-g" id="pgc">Cancelar</button>
@@ -923,15 +951,18 @@ export async function openPagoForm(pagoId = null) {
   const close = () => ov.remove();
   getEl('pgx').onclick = close; getEl('pgc').onclick = close;
   bindMoneyInput(getEl('pgm'));
+  const comp     = bindComprobanteField(ov, p);
+  const combo    = bindPropCombo(ov, 'pgp', { grupos: [{ label: 'Mis propiedades', items: myProps }], selected: p?.propId });
+  const concepto = bindConceptoField(ov, 'pgcon');
   getEl('pgok').onclick = async () => {
     const dto = {
       inquilino: getEl('pgi').value.trim(),
-      propId:    getEl('pgp').value,
+      propId:    combo.value(),
       monto:     parseCOP(getEl('pgm').value),
       fecha:     getEl('pgf').value,
       estado:    getEl('pge').value,
       metodo:    getEl('pgmet').value,
-      concepto:  getEl('pgcon').value.trim(),
+      concepto:  concepto.value(),
     };
     if (p) {
       // Al editar: sin cambios no se reasigna; vacío desvincula al inquilino
@@ -942,19 +973,415 @@ export async function openPagoForm(pagoId = null) {
       if (!dto.inquilino) delete dto.inquilino;
       if (!dto.concepto)  delete dto.concepto;
     }
-    if (!dto.propId) return showToast('Selecciona la propiedad','warning');
+    if (!dto.propId) return showToast('Busca y elige la propiedad de la lista','warning');
     if (!Number.isFinite(dto.monto) || dto.monto < 1) return showToast('Ingresa un monto válido mayor a $0','warning');
     if (!dto.fecha) return showToast('Selecciona la fecha','warning');
+    let guardado = null;
     try {
-      await withLoading(getEl('pgok'), () => p ? updatePago(p.id, dto) : addPago(dto));
+      await withLoading(getEl('pgok'), async () => {
+        guardado = p ? await updatePago(p.id, dto) : await addPago(dto);
+        await comp.guardar(guardado.id);
+      });
       close(); showToast(p ? 'Pago actualizado ✓' : 'Pago registrado ✓','success'); await refreshView();
-    } catch(e) { showToast(e.message || 'Error','error'); }
+    } catch(e) {
+      // El pago ya quedó guardado aunque falle el comprobante: se cierra para no duplicarlo
+      if (guardado) { close(); await refreshView(); showErrorAlert('El pago se guardó, pero no el comprobante', e.message); }
+      else showToast(e.message || 'Error','error');
+    }
   };
+}
+
+// ── Pagos: conceptos y métodos ────────────────────────────────
+export const CONCEPTOS = ['Canon de arrendamiento', 'Servicios públicos', 'Cuota de administración',
+                          'Depósito de garantía', 'Mantenimiento / Reparaciones', 'Otros'];
+// Textos que se usaban antes (texto libre) → concepto equivalente de la lista
+const CONCEPTOS_ANTERIORES = {
+  'canon': 'Canon de arrendamiento', 'canon de arriendo': 'Canon de arrendamiento',
+  'administracion': 'Cuota de administración', 'deposito': 'Depósito de garantía',
+  'reparaciones': 'Mantenimiento / Reparaciones', 'mantenimiento': 'Mantenimiento / Reparaciones',
+  'servicios': 'Servicios públicos',
+};
+const METODOS = ['Transferencia', 'PSE', 'Nequi', 'Daviplata', 'Tarjeta', 'Efectivo'];
+
+// Conserva un método guardado que no esté en la lista (si no, al editar se cambiaría sin querer)
+function metodoOptions(actual) {
+  const lista = actual && !METODOS.includes(actual) ? [...METODOS, actual] : METODOS;
+  return lista.map(m => `<option${m === actual ? ' selected' : ''}>${sanitize(m)}</option>`).join('');
+}
+
+// Minúsculas y sin tildes, para buscar "bogota" y encontrar "Bogotá"
+function normalizar(s) {
+  return String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+}
+
+// "Otros: lavado de tanques" → { sel: 'Otros', detalle: 'lavado de tanques' }
+function parseConcepto(texto) {
+  const t = String(texto ?? '').trim();
+  if (!t) return { sel: '', detalle: '' };
+  if (CONCEPTOS.includes(t)) return { sel: t, detalle: '' };
+  const anterior = CONCEPTOS_ANTERIORES[normalizar(t)];
+  if (anterior) return { sel: anterior, detalle: '' };
+  const m = t.match(/^otros?\s*:?\s*(.*)$/i);
+  return { sel: 'Otros', detalle: m ? m[1] : t };
+}
+
+function conceptoFieldHtml(id, actual, opcional) {
+  const { sel, detalle } = parseConcepto(actual);
+  return `
+    <div class="mf"><label>Concepto ${opcional ? '<span style="font-weight:400;color:var(--t3)">— opcional</span>' : '*'}</label>
+      <select id="${id}">
+        ${opcional ? `<option value=""${sel ? '' : ' selected'}>Sin concepto</option>` : ''}
+        ${CONCEPTOS.map(c => `<option${c === sel ? ' selected' : ''}>${c}</option>`).join('')}
+      </select>
+      <input id="${id}-otro" maxlength="70" placeholder="¿Cuál? Ej: lavado de tanques (opcional)" value="${sanitize(detalle)}" style="margin-top:8px${sel === 'Otros' ? '' : ';display:none'}"/>
+    </div>`;
+}
+
+function bindConceptoField(ov, id) {
+  const sel  = ov.querySelector('#' + id);
+  const otro = ov.querySelector('#' + id + '-otro');
+  sel.addEventListener('change', () => {
+    otro.style.display = sel.value === 'Otros' ? '' : 'none';
+    if (sel.value === 'Otros') otro.focus();
+  });
+  return {
+    value() {
+      if (sel.value !== 'Otros') return sel.value;
+      const d = otro.value.trim();
+      return d ? `Otros: ${d}` : 'Otros';
+    },
+  };
+}
+
+// ── Buscador de propiedades (combo box con autocompletado) ─────
+function propComboHtml(id) {
+  return `
+    <div class="pcombo">
+      <input type="hidden" id="${id}"/>
+      <input id="${id}-q" class="pc-input" type="text" autocomplete="off" role="combobox" aria-expanded="false"
+             aria-autocomplete="list" aria-controls="${id}-list" placeholder="🔎 Busca por nombre, ciudad o barrio…"/>
+      <button type="button" class="pc-clear" title="Quitar selección" hidden>✕</button>
+      <ul class="pc-list" id="${id}-list" role="listbox" hidden></ul>
+    </div>`;
+}
+
+// grupos: [{ label, items }] en orden de prioridad. buscarRemoto(q) agrega resultados del servidor.
+function bindPropCombo(ov, id, { grupos, selected = null, buscarRemoto = null, onSelect = null }) {
+  const hidden = ov.querySelector('#' + id);
+  const input  = ov.querySelector('#' + id + '-q');
+  const list   = ov.querySelector('#' + id + '-list');
+  const clear  = ov.querySelector('#' + id + '-q ~ .pc-clear');
+  const MAX_POR_GRUPO = 8;
+
+  // Una propiedad aparece una sola vez, en el grupo de mayor prioridad
+  const vistos = new Set();
+  const base = grupos.map(g => ({
+    label: g.label,
+    items: (g.items || []).filter(p => p?.id && !vistos.has(p.id) && vistos.add(p.id)),
+  })).filter(g => g.items.length);
+  let remotos = [], remotoQ = '', visibles = [], activo = -1, timer = null, elegido = null;
+
+  const texto = (p) => normalizar([p.titulo, p.ciudad, p.barrio].filter(Boolean).join(' '));
+  const coincide = (p, tokens) => { const t = texto(p); return tokens.every(k => t.includes(k)); };
+  const sub = (p) => [p.ciudad && capitalize(p.ciudad), p.barrio, p.precio && formatCOP(p.precio) + '/mes'].filter(Boolean).join(' · ');
+
+  function render() {
+    const q = normalizar(input.value === elegido?.titulo ? '' : input.value);
+    const tokens = q.split(/\s+/).filter(Boolean);
+    const res = base.map(g => ({ label: g.label, items: g.items.filter(p => coincide(p, tokens)).slice(0, MAX_POR_GRUPO) }));
+    if (tokens.length && remotoQ === q) {
+      const extra = remotos.filter(p => !vistos.has(p.id) && coincide(p, tokens));
+      if (extra.length) res.push({ label: 'Más resultados', items: extra.slice(0, MAX_POR_GRUPO) });
+    }
+    visibles = [];
+    const html = res.filter(g => g.items.length).map(g =>
+      `<li class="pc-group" role="presentation">${sanitize(g.label)}</li>` +
+      g.items.map(p => {
+        const i = visibles.push(p) - 1;
+        return `<li class="pc-opt${p.id === hidden.value ? ' sel' : ''}" role="option" id="${id}-o${i}" data-i="${i}" data-id="${sanitize(p.id)}" aria-selected="${p.id === hidden.value}">
+          <div class="pc-tit">${sanitize(p.titulo)}</div>${sub(p) ? `<div class="pc-sub">${sanitize(sub(p))}</div>` : ''}</li>`;
+      }).join('')
+    ).join('');
+    list.innerHTML = html || `<li class="pc-empty">${tokens.length ? 'Sin coincidencias para "' + sanitize(input.value.trim()) + '"' : 'No hay propiedades disponibles'}</li>`;
+    activo = Math.min(activo, visibles.length - 1);
+    marcarActivo();
+  }
+
+  function marcarActivo() {
+    list.querySelectorAll('.pc-opt').forEach(li => li.classList.toggle('act', Number(li.dataset.i) === activo));
+    const li = list.querySelector(`[data-i="${activo}"]`);
+    if (li) { li.scrollIntoView({ block: 'nearest' }); input.setAttribute('aria-activedescendant', li.id); }
+    else input.removeAttribute('aria-activedescendant');
+  }
+
+  const abrir  = () => { list.hidden = false; input.setAttribute('aria-expanded', 'true'); render(); };
+  const cerrar = () => { list.hidden = true; input.setAttribute('aria-expanded', 'false'); activo = -1; };
+
+  function elegir(p) {
+    elegido = p;
+    hidden.value = p ? p.id : '';
+    input.value  = p ? p.titulo : '';
+    input.classList.toggle('pc-ok', !!p);
+    clear.hidden = !p;
+    cerrar();
+    if (p && onSelect) onSelect(p);
+  }
+
+  input.addEventListener('focus', abrir);
+  input.addEventListener('input', () => {
+    // Al escribir se descarta la selección anterior hasta elegir otra
+    if (elegido && input.value !== elegido.titulo) { elegido = null; hidden.value = ''; input.classList.remove('pc-ok'); clear.hidden = true; }
+    activo = 0;
+    abrir();
+    if (!buscarRemoto) return;
+    clearTimeout(timer);
+    const q = normalizar(input.value);
+    if (q.length < 2) return;
+    timer = setTimeout(async () => {
+      const r = await buscarRemoto(input.value.trim()).catch(() => []);
+      if (normalizar(input.value) !== q) return;   // llegó tarde: el usuario siguió escribiendo
+      remotos = r; remotoQ = q;
+      if (!list.hidden) render();
+    }, 250);
+  });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (list.hidden) return abrir();
+      if (!visibles.length) return;
+      activo = (activo + (e.key === 'ArrowDown' ? 1 : -1) + visibles.length) % visibles.length;
+      marcarActivo();
+    } else if (e.key === 'Enter') {
+      if (!list.hidden && visibles[activo]) { e.preventDefault(); elegir(visibles[activo]); }
+    } else if (e.key === 'Escape' && !list.hidden) {
+      e.preventDefault(); e.stopPropagation(); cerrar();
+    }
+  });
+  // mousedown (no click): se elige antes de que el input pierda el foco
+  list.addEventListener('mousedown', (e) => {
+    const li = e.target.closest('.pc-opt');
+    e.preventDefault();
+    if (li) elegir(visibles[Number(li.dataset.i)]);
+  });
+  input.addEventListener('blur', () => {
+    cerrar();
+    // Texto suelto sin elegir: se restaura la selección (o se limpia)
+    if (elegido) input.value = elegido.titulo;
+  });
+  clear.addEventListener('click', () => { elegir(null); input.focus(); });
+
+  if (selected) {
+    const p = base.flatMap(g => g.items).find(x => x.id === selected);
+    if (p) { elegido = p; hidden.value = p.id; input.value = p.titulo; input.classList.add('pc-ok'); clear.hidden = false; }
+  }
+  return { value: () => hidden.value };
+}
+
+// ── Comprobante de pago: campo con previsualización ───────────
+// Al editar muestra el comprobante actual; guardar() sube el nuevo o quita el anterior
+function comprobanteFieldHtml() {
+  return `
+    <div class="mf">
+      <label>Comprobante de pago <span style="font-weight:400;color:var(--t3)">— opcional · foto, pantallazo o PDF (máx. 5 MB)</span></label>
+      <input type="file" class="comp-input" accept="${COMPROBANTE_TYPES.join(',')}" hidden/>
+      <div class="comp-box"></div>
+    </div>`;
+}
+
+function bindComprobanteField(ov, pago = null) {
+  const input = ov.querySelector('.comp-input');
+  const box   = ov.querySelector('.comp-box');
+  let file = null, quitar = false, previewUrl = '';
+
+  const render = () => {
+    if (previewUrl) { URL.revokeObjectURL(previewUrl); previewUrl = ''; }
+    if (file) {
+      const esPdf = file.type === 'application/pdf';
+      if (!esPdf) previewUrl = URL.createObjectURL(file);
+      box.innerHTML = `
+        <div class="comp-prev">
+          ${esPdf ? '<div class="comp-thumb comp-pdf">PDF</div>' : `<img class="comp-thumb" src="${previewUrl}" alt="Vista previa del comprobante"/>`}
+          <div class="comp-info"><div class="comp-name">${sanitize(file.name)}</div><div class="comp-size">${formatBytes(file.size)}</div></div>
+          <button type="button" class="btn-g comp-change">Cambiar</button>
+          <button type="button" class="btn-mx comp-del" title="Quitar archivo">✕</button>
+        </div>`;
+    } else if (pago?.comprobanteUrl && !quitar) {
+      box.innerHTML = `
+        <div class="comp-prev">
+          <div class="comp-thumb comp-pdf">${esPdfUrl(pago.comprobanteUrl) ? 'PDF' : '🖼️'}</div>
+          <div class="comp-info"><div class="comp-name">Comprobante adjunto</div><button type="button" class="comp-link comp-ver">Ver comprobante</button></div>
+          <button type="button" class="btn-g comp-change">Reemplazar</button>
+          <button type="button" class="btn-mx comp-del" title="Quitar comprobante">✕</button>
+        </div>`;
+    } else {
+      box.innerHTML = `<button type="button" class="comp-drop comp-change">📎 Adjuntar foto, pantallazo o PDF del comprobante</button>`;
+    }
+    box.querySelector('.comp-change').onclick = () => input.click();
+    const del = box.querySelector('.comp-del');
+    if (del) del.onclick = () => { if (file) file = null; else quitar = true; render(); };
+    const ver = box.querySelector('.comp-ver');
+    if (ver) ver.onclick = () => openComprobante(pago.id);
+  };
+
+  input.onchange = () => {
+    const f = input.files[0];
+    input.value = '';
+    if (!f) return;
+    const err = validarComprobante(f);
+    if (err) return showToast(err, 'warning');
+    file = f; render();
+  };
+
+  // Libera la vista previa cuando se cierra el modal
+  onRemoved(ov, () => { if (previewUrl) URL.revokeObjectURL(previewUrl); });
+
+  render();
+  return {
+    async guardar(pagoId) {
+      if (file) await subirComprobante(pagoId, file);
+      else if (quitar && pago?.comprobanteUrl) await quitarComprobante(pagoId);
+    },
+  };
+}
+
+function validarComprobante(f) {
+  if (!COMPROBANTE_TYPES.includes(f.type)) return `"${f.name}" no es una imagen JPG, PNG, WEBP ni un PDF`;
+  if (f.size > MAX_FOTO_BYTES) return `"${f.name}" pesa ${formatBytes(f.size)}; el máximo es 5 MB`;
+  return '';
+}
+
+function esPdfUrl(url) { return /\.pdf$/i.test(url || ''); }
+
+function formatBytes(n) {
+  return n >= 1024 * 1024 ? formatNum(n / 1024 / 1024, 1) + ' MB' : formatNum(Math.max(1, Math.round(n / 1024))) + ' KB';
+}
+
+// Ejecuta fn cuando el overlay sale del DOM (cerrar con ✕, Cancelar o clic afuera)
+function onRemoved(el, fn) {
+  new MutationObserver((_, obs) => { if (!el.isConnected) { obs.disconnect(); fn(); } })
+    .observe(document.body, { childList: true });
+}
+
+// ── Inquilino: reportar un pago hecho por fuera de la plataforma ──
+export async function openReportarPago() {
+  const props = await getPropsReportables();
+  const ov = createOverlay();
+
+  ov.innerHTML = `
+    <div class="modal-box" style="max-width:470px">
+      <div class="mh"><div><div class="mh-title">Reportar pago</div><div class="mh-sub">El arrendador lo revisará y lo confirmará</div></div><button class="btn-mx" id="rpx">✕</button></div>
+      <div style="padding:24px 28px;display:flex;flex-direction:column;gap:16px">
+        <div class="mf"><label>Propiedad de tu arriendo *</label>${propComboHtml('rpp')}</div>
+        ${conceptoFieldHtml('rpcon', CONCEPTOS[0], false)}
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+          <div class="mf"><label>Monto pagado (COP) *</label><input id="rpm" inputmode="numeric" autocomplete="off" placeholder="1.800.000"/></div>
+          <div class="mf"><label>Fecha del pago *</label><input id="rpf" type="date" value="${today()}" max="${today()}"/></div>
+        </div>
+        <div class="mf"><label>Método</label><select id="rpmet">${metodoOptions('Transferencia')}</select></div>
+        ${comprobanteFieldHtml()}
+      </div>
+      <div class="mf-foot">
+        <button class="btn-g" id="rpc">Cancelar</button>
+        <button class="btn-a" id="rpok">Reportar pago</button>
+      </div>
+    </div>`;
+
+  const close = () => ov.remove();
+  getEl('rpx').onclick = close; getEl('rpc').onclick = close;
+  bindMoneyInput(getEl('rpm'));
+  const comp     = bindComprobanteField(ov);
+  const concepto = bindConceptoField(ov, 'rpcon');
+  // Primero lo que el inquilino realmente arrienda (tiene pagos), luego sus visitas, luego el resto;
+  // al escribir también se busca en el servidor (el catálogo inicial trae solo 50)
+  const combo = bindPropCombo(ov, 'rpp', {
+    grupos: [
+      { label: 'Mis arriendos', items: props.arriendos },
+      { label: 'Propiedades que visité', items: props.visitas },
+      { label: 'Otras propiedades publicadas', items: props.otras },
+    ],
+    buscarRemoto: async (q) => { const r = await PropiedadesApi.findAll({ q, limit: 20 }); return r?.ok ? r.data : []; },
+    // Sugiere el canon de la propiedad elegida si el monto está vacío y el concepto es el canon
+    onSelect: (prop) => {
+      if (prop?.precio && !getEl('rpm').value && concepto.value() === CONCEPTOS[0]) getEl('rpm').value = formatNum(prop.precio);
+    },
+  });
+
+  getEl('rpok').onclick = async () => {
+    const dto = {
+      propId:   combo.value(),
+      concepto: concepto.value(),
+      monto:    parseCOP(getEl('rpm').value),
+      fecha:    getEl('rpf').value,
+      metodo:   getEl('rpmet').value,
+    };
+    if (!dto.propId) return showToast('Busca y elige la propiedad de la lista','warning');
+    if (!dto.concepto) return showToast('Selecciona el concepto del pago','warning');
+    if (!Number.isFinite(dto.monto) || dto.monto < 1) return showToast('Ingresa un monto válido mayor a $0','warning');
+    if (!dto.fecha) return showToast('Selecciona la fecha','warning');
+    let guardado = null;
+    try {
+      await withLoading(getEl('rpok'), async () => {
+        guardado = await reportarPago(dto);
+        await comp.guardar(guardado.id);
+      });
+      close(); showToast('Pago reportado ✓ El arrendador lo revisará','success'); await refreshView();
+    } catch(e) {
+      if (guardado) { close(); await refreshView(); showErrorAlert('El pago se reportó, pero no el comprobante', e.message + '. Puedes adjuntarlo desde la tabla.'); }
+      else showToast(e.message || 'Error','error');
+    }
+  };
+}
+
+// Adjunta un comprobante directo desde la tabla (abre el selector de archivos)
+export function adjuntarComprobante(pagoId) {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = COMPROBANTE_TYPES.join(',');
+  input.onchange = async () => {
+    const f = input.files[0];
+    if (!f) return;
+    const err = validarComprobante(f);
+    if (err) return showToast(err, 'warning');
+    try {
+      await subirComprobante(pagoId, f);
+      showToast('Comprobante adjuntado ✓','success'); await refreshView();
+    } catch(e) { showErrorAlert('No se pudo adjuntar el comprobante', e.message); }
+  };
+  input.click();
+}
+
+// ── Visor del comprobante (imagen o PDF) ──────────────────────
+// El archivo es privado: se descarga con el token y se muestra como blob
+export async function openComprobante(pagoId) {
+  const p = (State.pagos || []).find(x => x.id === pagoId);
+  const r = await PagosApi.comprobante(pagoId);
+  if (!r?.ok) return showErrorAlert('No se pudo abrir el comprobante', r?.error?.message);
+
+  const url   = URL.createObjectURL(r.blob);
+  const esPdf = r.blob.type === 'application/pdf';
+  const ext   = esPdf ? 'pdf' : (r.blob.type.split('/')[1] || 'jpg').replace('jpeg', 'jpg');
+  const ov    = createOverlay();
+  ov.innerHTML = `
+    <div class="modal-box comp-viewer">
+      <div class="mh"><div><div class="mh-title">🧾 Comprobante de pago</div>
+        ${p ? `<div class="mh-sub">${formatCOP(p.monto)} · ${sanitize(formatFecha(p.fecha))}${p.concepto ? ' · ' + sanitize(p.concepto) : ''}</div>` : ''}</div>
+        <button class="btn-mx" id="cvx">✕</button></div>
+      <div class="comp-view-body">
+        ${esPdf ? `<iframe src="${url}" title="Comprobante PDF"></iframe>` : `<img src="${url}" alt="Comprobante de pago"/>`}
+      </div>
+      <div class="mf-foot">
+        <a class="btn-g" href="${url}" target="_blank" rel="noopener">↗ Abrir en otra pestaña</a>
+        <a class="btn-a" href="${url}" download="comprobante-${sanitize(p?.fecha || 'pago')}.${ext}">⬇ Descargar</a>
+      </div>
+    </div>`;
+
+  getEl('cvx').onclick = () => ov.remove();
+  onRemoved(ov, () => URL.revokeObjectURL(url));
 }
 
 export async function confirmDeletePago(pagoId) {
   const p  = (State.pagos || []).find(x => x.id === pagoId);
-  const ok = await confirmDialog('¿Eliminar pago?', p ? `Se eliminará el registro de <strong>${formatCOP(p.monto)}</strong> del ${sanitize(p.fecha)}.` : 'Esta acción no se puede deshacer.');
+  const ok = await confirmDialog('¿Eliminar pago?', p ? `Se eliminará el registro de <strong>${formatCOP(p.monto)}</strong> del ${sanitize(formatFecha(p.fecha))}.` : 'Esta acción no se puede deshacer.');
   if (!ok) return;
   try { await deletePago(pagoId); showToast('Pago eliminado','error'); await refreshView(); }
   catch(e) { showToast(e.message || 'Error','error'); }

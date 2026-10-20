@@ -59,6 +59,40 @@ export async function getMyPagos() { const r = State.session?.rol === 'inquilino
 export async function addPago(dto) { const p = unwrap(await PagosApi.create(dto)); State.pagos.unshift(p); return p; }
 export async function updatePago(id, dto) { const p = unwrap(await PagosApi.update(id, dto)); replaceIn(State.pagos, p); return p; }
 export async function deletePago(id) { unwrap(await PagosApi.remove(id)); State.pagos = State.pagos.filter(p => p.id !== id); }
+// Propiedades que el inquilino puede elegir al reportar un pago, por prioridad:
+// arriendos (tiene pagos en ellas, la más reciente primero), visitas no canceladas
+// (confirmadas primero) y el resto de publicadas. No toca State.props (caché del catálogo)
+export async function getPropsReportables() {
+    const [pubs, visitas, pagos] = await Promise.all([
+        PropiedadesApi.findAll({ limit: 50 }), VisitasApi.findAll(), PagosApi.findMios(),
+    ]);
+    const publicadas = pubs?.ok ? pubs.data : [];
+    const ids = (lista) => [...new Set(lista.map(x => x.propId).filter(Boolean))];
+    const arriendoIds = ids(pagos?.ok ? pagos.data : []);
+    const visitaIds   = ids((visitas?.ok ? visitas.data : [])
+        .filter(v => v.estado !== 'cancelada')
+        .sort((a, b) => (b.estado === 'confirmada') - (a.estado === 'confirmada')))
+        .filter(id => !arriendoIds.includes(id));
+
+    // Las que no vinieron en la primera página del catálogo se piden una por una (con ciudad y canon)
+    const faltan = [...arriendoIds, ...visitaIds].filter(id => !publicadas.some(p => p.id === id)).slice(0, 10);
+    const resp   = await Promise.all(faltan.map(id => PropiedadesApi.findOne(id)));
+    const extra  = resp.filter(r => r?.ok).map(r => r.data);
+    const borradas = faltan.filter((_, i) => resp[i]?.status === 404 || resp[i]?.error?.code === 'PROP_NOT_FOUND');
+    const titulos = new Map([...(pagos?.data || []), ...(visitas?.data || [])].map(x => [x.propId, x.inquilino?.titulo]));
+    const buscar  = (id) => publicadas.find(p => p.id === id) || extra.find(p => p.id === id) || { id, titulo: titulos.get(id) || 'Propiedad' };
+
+    return {
+        // Las eliminadas no se ofrecen: el servidor rechazaría el reporte
+        arriendos: arriendoIds.filter(id => !borradas.includes(id)).map(buscar),
+        visitas:   visitaIds.filter(id => !borradas.includes(id)).map(buscar),
+        otras:     publicadas.filter(p => !arriendoIds.includes(p.id) && !visitaIds.includes(p.id)),
+    };
+}
+export async function reportarPago(dto) { const p = unwrap(await PagosApi.reportar(dto)); State.pagos.unshift(p); return p; }
+// Sube (o reemplaza) el comprobante y actualiza el pago en caché
+export async function subirComprobante(id, file) { const d = unwrap(await PagosApi.subirComprobante(id, file)); const p = State.pagos.find(x => x.id === id); if (p) p.comprobanteUrl = d.comprobanteUrl; return d; }
+export async function quitarComprobante(id) { unwrap(await PagosApi.quitarComprobante(id)); const p = State.pagos.find(x => x.id === id); if (p) p.comprobanteUrl = null; }
 export async function markPagoAsPaid(id) { const r = await PagosApi.updateEstado(id, 'pagado'); if (r?.ok) { const p = State.pagos.find(p => p.id === id); if (p) p.estado = 'pagado'; } return r?.ok; }
 
 // Mensajes (conversaciones agrupadas por usuario)

@@ -32,7 +32,19 @@ const NAV_INQUILINO = [
 ];
 
 // ── Toast ──────────────────────────────────────────────────────
+// Usa SweetAlert2 si cargó desde el CDN; si no, el toast propio
+const SWAL_ICONS = { success:'success', error:'error', info:'info', warning:'warning' };
+let swalToast = null;
+
 export function showToast(msg, type='success', duration=3200) {
+  if (window.Swal) {
+    swalToast = swalToast || window.Swal.mixin({
+      // El toast deja pasar los clics (.swal2-toast en app.css): no bloquea botones que tenga debajo
+      toast: true, position: 'top-end', showConfirmButton: false, timerProgressBar: true,
+    });
+    swalToast.fire({ icon: SWAL_ICONS[type] || 'success', titleText: String(msg ?? ''), timer: duration });   // titleText = texto plano (sin HTML)
+    return;
+  }
   const colors = { success:'#0f9d58', error:'#ef4444', info:'#1e3a8a', warning:'#f59e0b' };
   const icons  = { success:'✅', error:'❌', info:'ℹ️', warning:'⚠️' };
   const wrap   = getEl('toast-wrap');
@@ -48,6 +60,12 @@ export function showToast(msg, type='success', duration=3200) {
     toast.style.transform  = 'translateX(14px)';
     setTimeout(() => toast.remove(), 320);
   }, duration);
+}
+
+// Modal de error (login, registro, fallos de red). Devuelve una promesa que se resuelve al cerrar
+export function showErrorAlert(title, msg) {
+  if (!window.Swal) { showToast(msg || title, 'error', 4500); return Promise.resolve(); }
+  return window.Swal.fire({ icon: 'error', titleText: title, text: msg || '', confirmButtonText: 'Entendido', confirmButtonColor: '#1e3a8a' });
 }
 
 // ── Init ───────────────────────────────────────────────────────
@@ -93,6 +111,7 @@ export async function showView(name) {
   const rol = State.session ? State.session.rol : null;
   if (!rol || !RBAC[rol] || !RBAC[rol].includes(name)) { showToast('Sin permiso', 'error'); return; }
   currentView = name;
+  document.body.dataset.view = name;   // permite ocultar el widget de WhatsApp en el chat
   document.querySelectorAll('.ni').forEach(function(i) { i.classList.toggle('active', i.dataset.v === name); });
   const mainArea = getEl('main-area');
   if (!mainArea) return;
@@ -702,6 +721,17 @@ function filtroChips(pagos) {
   }).join('') + '</div>';
 }
 
+// Columna "Comprobante": ver el adjunto, adjuntar uno nuevo o nada
+function comprobanteCell(p, puedeAdjuntar) {
+  if (p.comprobanteUrl) return rowBtn('🧾 Ver', 'window.__verComprobante(\'' + p.id + '\')', 'edit');
+  if (puedeAdjuntar)    return rowBtn('📎 Adjuntar', 'window.__adjuntarComprobante(\'' + p.id + '\')', 'edit');
+  return '<span style="font-size:12px;color:var(--t3)">—</span>';
+}
+
+// Reportado por el inquilino y aún sin confirmar por el arrendador
+function enRevision(p) { return p.origen === 'inquilino' && p.estado !== 'pagado'; }
+var REVISION_BADGE = '<span class="badge b-i" title="Reportado por el inquilino, pendiente de confirmar">🕓 En revisión</span>';
+
 function sumMonto(pagos, estado) {
   return pagos.filter(function(p) { return p.estado === estado; }).reduce(function(s, p) { return s + p.monto; }, 0);
 }
@@ -711,18 +741,19 @@ async function renderPagos(el) {
   const pagos = await getMyPagos();
   var visibles = pagosFiltro ? pagos.filter(function(p) { return p.estado === pagosFiltro; }) : pagos;
 
-  var cols = '1.1fr 1.3fr .9fr .75fr .6fr 1.5fr';
+  var cols = '1.1fr 1.3fr .9fr .75fr .6fr .75fr 1.5fr';
   var rows = visibles.map(function(p, i) {
     var propTitulo = (p.inquilino && p.inquilino.titulo) ? p.inquilino.titulo : '—';
     return '<div class="t-row" style="grid-template-columns:' + cols + ';background:' + (i%2?'#f9fafb':'#fff') + '">' +
-      '<div>' + pagoInquilino(p) + '</div>' +
+      '<div>' + pagoInquilino(p) + (p.origen === 'inquilino' ? '<div style="font-size:11px;color:var(--t3);margin-top:2px">Reportado por el inquilino</div>' : '') + '</div>' +
       '<div><span style="font-size:12px;color:var(--t2)">' + sanitize(propTitulo) + '</span>' + pagoConcepto(p) + '</div>' +
       '<span style="font-size:15px;font-weight:800;color:var(--pr)">' + formatCOP(p.monto) + '</span>' +
       '<span style="font-size:12px;color:var(--t2)">' + sanitize(formatFecha(p.fecha)) + '</span>' +
       '<span style="font-size:11px;padding:2px 8px;border-radius:99px;background:#f3f4f6;color:var(--t2);justify-self:start">' + sanitize(p.metodo||'—') + '</span>' +
+      '<div>' + comprobanteCell(p, true) + '</div>' +
       '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">' +
-        estadoBadge(p.estado) +
-        (p.estado !== 'pagado' ? rowBtn('✓ Pagado', 'window.__markPago(\'' + p.id + '\')', 'ok') : '') +
+        (enRevision(p) ? REVISION_BADGE : estadoBadge(p.estado)) +
+        (p.estado !== 'pagado' ? rowBtn(enRevision(p) ? '✓ Confirmar' : '✓ Pagado', 'window.__markPago(\'' + p.id + '\')', 'ok') : '') +
         rowBtn('✏️', 'window.__openPagoForm(\'' + p.id + '\')', 'edit') +
         rowBtn('🗑', 'window.__delPago(\'' + p.id + '\')', 'del') +
       '</div>' +
@@ -742,7 +773,7 @@ async function renderPagos(el) {
     filtroChips(pagos) +
     '<div class="tbl-wrap tbl-scroll">' +
       '<div class="t-head" style="grid-template-columns:' + cols + '">' +
-        '<span>Inquilino</span><span>Propiedad / Concepto</span><span>Monto</span><span>Fecha</span><span>Método</span><span>Estado / Acciones</span>' +
+        '<span>Inquilino</span><span>Propiedad / Concepto</span><span>Monto</span><span>Fecha</span><span>Método</span><span>Comprobante</span><span>Estado / Acciones</span>' +
       '</div>' +
       '<div id="pgb">' + (rows || '<div style="padding:30px;text-align:center;color:var(--t3)">' + (pagos.length ? 'No hay pagos con este estado' : 'Sin pagos registrados') + '</div>') + '</div>' +
     '</div>';
@@ -753,33 +784,39 @@ async function renderMisPagos(el) {
   if (pagosTab === 'planes') return renderPlanesTab(el, 'Mis Pagos');
   const pagos = await getMyPagos();
   var visibles = pagosFiltro ? pagos.filter(function(p) { return p.estado === pagosFiltro; }) : pagos;
-  var cols = '1.5fr 1fr .8fr 1.3fr';
+  var cols = '1.5fr 1fr .8fr .8fr 1.3fr';
 
   var rows = visibles.map(function(p, i) {
     var propTitulo = (p.inquilino && p.inquilino.titulo) ? p.inquilino.titulo : '—';
+    // Un pago reportado ya se hizo por fuera: no se paga con Wompi y se puede borrar mientras esté en revisión
+    var acciones = enRevision(p)
+      ? REVISION_BADGE + rowBtn('🗑', 'window.__delPago(\'' + p.id + '\')', 'del')
+      : estadoBadge(p.estado) + (p.estado !== 'pagado' ? rowBtn('💳 Pagar', 'window.__pagarPago(\'' + p.id + '\')', 'ok') : '');
     return '<div class="t-row" style="grid-template-columns:' + cols + ';background:' + (i%2?'#f9fafb':'#fff') + '">' +
       '<div><span style="font-size:13px;font-weight:600">' + sanitize(propTitulo) + '</span>' + pagoConcepto(p) + '</div>' +
       '<span style="font-size:15px;font-weight:800;color:var(--pr)">' + formatCOP(p.monto) + '</span>' +
       '<span style="font-size:12.5px;color:var(--t2)">' + sanitize(formatFecha(p.fecha)) + '</span>' +
-      '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">' +
-        estadoBadge(p.estado) +
-        (p.estado !== 'pagado' ? rowBtn('💳 Pagar', 'window.__pagarPago(\'' + p.id + '\')', 'ok') : '') +
-      '</div>' +
+      '<div>' + comprobanteCell(p, p.estado !== 'pagado') + '</div>' +
+      '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">' + acciones + '</div>' +
     '</div>';
   }).join('');
+  var porPagar  = pagos.filter(function(p) { return p.estado !== 'pagado' && !enRevision(p); }).reduce(function(s, p) { return s + p.monto; }, 0);
+  var revisionN = pagos.filter(enRevision).length;
 
   el.innerHTML =
-    '<div class="topbar"><div><h1 class="pg-title">Mis Pagos</h1><p class="pg-sub">Historial de pagos y planes</p></div></div>' +
+    '<div class="topbar"><div><h1 class="pg-title">Mis Pagos</h1><p class="pg-sub">Historial de pagos y planes</p></div>' +
+    '<button class="btn-a" onclick="window.__reportarPago()">+ Reportar pago</button></div>' +
     pagosTabsHtml() +
     '<div class="kpi-grid">' +
       kpiCard('💰','#f0fdf4','Total pagado', formatShort(sumMonto(pagos,'pagado')), 'COP') +
-      kpiCard('⏳','#fefce8','Por pagar', formatShort(sumMonto(pagos,'pendiente') + sumMonto(pagos,'vencido')), 'COP') +
+      kpiCard('⏳','#fefce8','Por pagar', formatShort(porPagar), 'COP') +
+      kpiCard('🕓','#eff3fb','En revisión', formatNum(revisionN)) +
       kpiCard('📋','#eff3fb','Transacciones', formatNum(pagos.length)) +
     '</div>' +
     filtroChips(pagos) +
     '<div class="tbl-wrap tbl-scroll">' +
       '<div class="t-head" style="grid-template-columns:' + cols + '">' +
-        '<span>Propiedad / Concepto</span><span>Monto</span><span>Fecha</span><span>Estado</span>' +
+        '<span>Propiedad / Concepto</span><span>Monto</span><span>Fecha</span><span>Comprobante</span><span>Estado</span>' +
       '</div>' +
       (rows || '<div style="padding:30px;text-align:center;color:var(--t3)">' + (pagos.length ? 'No hay pagos con este estado' : 'Aún no tienes pagos') + '</div>') +
     '</div>';
