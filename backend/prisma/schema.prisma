@@ -86,6 +86,8 @@ model Propiedad {
   banos        Int      @default(1)
   metros       Int
   parqueaderos Int      @default(0)
+  administracion Int?                        // cuota de administración mensual (COP); null = no informada
+  serviciosEst   Int?                        // servicios públicos estimados al mes (COP); null = se estima por estrato y área
   descripcion  String?
   fotos        String   @default("[]")      // JSON array serializado
   comodidades  String   @default("[]")      // JSON array serializado

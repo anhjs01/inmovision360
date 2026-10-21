@@ -12,6 +12,17 @@ function num(value: any): number | undefined {
   return value !== undefined && value !== '' && Number.isFinite(n) ? n : undefined;
 }
 
+// comodidades es un JSON serializado ('["mascotas","piscina"]'): se busca la cadena con comillas
+const tieneComodidad = (c: string) => ({ comodidades: { contains: `"${c}"` } });
+const ESTILOS: Record<string, any> = {
+  mascotas:    tieneComodidad('mascotas'),
+  amoblado:    tieneComodidad('amoblado'),
+  // Parqueadero incluido: marcado como comodidad o con al menos un cupo registrado
+  parqueadero: { OR: [tieneComodidad('parqueadero'), { parqueaderos: { gte: 1 } }] },
+  // Balcón: también cuentan las terrazas privadas
+  balcon:      { OR: [tieneComodidad('balcon'), tieneComodidad('terraza')] },
+};
+
 @Injectable()
 export class PropiedadesService {
   constructor(private prisma: PrismaService) {}
@@ -19,7 +30,7 @@ export class PropiedadesService {
   // ── Catálogo público ───────────────────────────────────────
   async findAll(query: any) {
     const { ciudad, tipo, listing, precio_min, precio_max, habitaciones,
-            estrato, tour_virtual, mapa_2d, sort, q } = query;
+            estrato, tour_virtual, mapa_2d, sort, q, estilo } = query;
 
     const where: any = { deletedAt: null };
     if (typeof ciudad  === 'string' && ciudad)  where.ciudad  = ciudad;
@@ -39,6 +50,11 @@ export class PropiedadesService {
       { ciudad:  { contains: q } },
       { barrio:  { contains: q } },
     ];
+    // Filtros de estilo de vida (?estilo=mascotas,balcon): deben cumplirse todos
+    if (typeof estilo === 'string' && estilo) {
+      const conds = estilo.split(',').map(e => ESTILOS[e.trim()]).filter(Boolean);
+      if (conds.length) where.AND = conds;
+    }
 
     const sortMap: any = {
       'precio_asc':  { precio: 'asc' },

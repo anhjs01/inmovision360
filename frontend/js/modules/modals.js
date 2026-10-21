@@ -11,7 +11,7 @@ import { State, addProp, updateProp, deleteProp, getPropById,
          getPlanes, suscribirse, cancelarPlan } from './store.js';
 import { showToast, showErrorAlert, refreshView, updateBadges, updateSidebarProfile, addPlanoSolicitado } from './ui.js';
 import { sanitize, formatCOP, formatNum, formatFecha, parseCOP, capitalize, getEl, safeUrl, waLink, WHATSAPP_SOPORTE,
-         CITY_LABELS, AMENITY_LABELS, LISTING_LABELS } from '../utils.js';
+         CITY_LABELS, AMENITY_LABELS, LISTING_LABELS, desgloseMensual } from '../utils.js';
 import { MensajesApi, PropiedadesApi, PagosApi, mediaUrl } from '../api.js';
 
 const MAX_FOTOS      = 20;
@@ -72,6 +72,46 @@ function propOptions(props, selectedId) {
 
 // Fecha local AAAA-MM-DD (toISOString usa UTC: en Colombia después de las 7 p. m. daría el día siguiente)
 function today() { const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); }
+
+// ── Agendamiento: días y horarios ─────────────────────────────
+const HORARIOS_VISITA = ['08:00','09:00','10:00','11:00','12:00','14:00','15:00','16:00','17:00','18:00'];
+
+function isoLocal(d) { return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); }
+
+// [{ iso, etiqueta: 'Hoy'|'Mañana'|'mié', num: '23', mes: 'oct', largo: 'miércoles 23 de octubre' }]
+function proximosDias(n) {
+  const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+  return Array.from({ length: n }, (_, i) => {
+    const d = new Date(hoy); d.setDate(hoy.getDate() + i);
+    const dow = d.toLocaleDateString('es-CO', { weekday: 'short' }).replace('.', '');
+    return {
+      iso: isoLocal(d),
+      etiqueta: i === 0 ? 'Hoy' : i === 1 ? 'Mañana' : capitalize(dow),
+      num: String(d.getDate()),
+      mes: d.toLocaleDateString('es-CO', { month: 'short' }).replace('.', ''),
+      largo: d.toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' }),
+    };
+  });
+}
+
+// Hoy solo se ofrecen horas con al menos 1 hora de anticipación
+function horariosDisponibles(iso) {
+  if (iso !== today()) return HORARIOS_VISITA;
+  const limite = new Date(Date.now() + 60 * 60000);
+  const min = String(limite.getHours()).padStart(2, '0') + ':' + String(limite.getMinutes()).padStart(2, '0');
+  return limite.getDate() !== new Date().getDate() ? [] : HORARIOS_VISITA.filter(h => h >= min);
+}
+
+// "14:00" → "2:00 p. m."
+function hora12(h) {
+  const [hh, mm] = h.split(':').map(Number);
+  return `${hh % 12 || 12}:${String(mm).padStart(2, '0')} ${hh < 12 ? 'a. m.' : 'p. m.'}`;
+}
+
+// Pasos explicativos cortos para procesos clave (pasos con HTML propio, sin datos del usuario)
+function helpSteps(pasos) {
+  return `<ol class="help-steps" aria-label="Cómo funciona">${pasos.map(p => `<li><span>${p}</span></li>`).join('')}</ol>`;
+}
 
 // Formatea un input de dinero con separador de miles mientras se escribe (1800000 → 1.800.000)
 function bindMoneyInput(input) {
@@ -187,7 +227,7 @@ export async function openDetail(propId) {
           </div>
         </div>`:''}
 
-      <div style="display:grid;grid-template-columns:1fr 280px;gap:20px;padding:20px">
+      <div class="det-grid">
         <div>
           <div style="display:flex;gap:18px;flex-wrap:wrap;padding:14px 0;border-top:1px solid var(--bo);border-bottom:1px solid var(--bo);margin-bottom:16px">
             <span style="font-size:13px;color:var(--t2)">🛏️ <strong>${formatNum(prop.habitaciones)}</strong> dorm.</span>
@@ -202,14 +242,17 @@ export async function openDetail(propId) {
             ${(prop.comodidades??[]).map(a=>`<span class="pc-tg">${AMENITY_LABELS[a]??sanitize(a)}</span>`).join('')}
           </div>
         </div>
-        <div style="background:#f9fafb;border:1px solid var(--bo);border-radius:16px;padding:20px;display:flex;flex-direction:column;gap:10px;align-self:start">
+        <div class="det-side">
           <div style="font-size:28px;font-weight:800;color:var(--pr)">${formatCOP(prop.precio)}</div>
           <div style="font-size:12px;color:var(--t3);margin-top:-8px">${prop.listing === 'sale' ? 'COP · Venta' : 'COP / mes'}</div>
-          ${esInq?`<button class="btn-a" onclick="window.__solicitarVisita('${prop.id}')">📅 Agendar visita</button>`:''}
-          ${!esPropia?`<button class="btn-p" style="background:#0f172a" onclick="window.__sendMsg('${prop.id}','${prop.ownerId}')">💬 Contactar arrendador</button>`:''}
-          <button id="det-fav-btn" style="padding:10px;border-radius:10px;border:1.5px solid #fed7aa;background:#fff8ed;color:var(--wa);font-size:13px;font-weight:600;cursor:pointer;font-family:var(--f)"
+          ${desgloseHtml(prop)}
+          ${esInq?`<button class="btn-a btn-xl" onclick="window.__solicitarVisita('${prop.id}')" aria-describedby="visita-hint">📅 Agendar visita</button>
+            <p class="btn-hint" id="visita-hint">Elige día y hora en 2 toques; el arrendador te confirma.</p>`:''}
+          ${!esPropia?`<button class="btn-p btn-xl" style="background:#0f172a" onclick="window.__sendMsg('${prop.id}','${prop.ownerId}')">💬 Contactar arrendador</button>`:''}
+          ${!esPropia ? `<a class="btn-wa btn-xl" href="${sanitize(waPropiedad(prop))}" target="_blank" rel="noopener noreferrer" aria-describedby="wa-hint">${WA_ICON} Escribir por WhatsApp</a>
+            <p class="btn-hint" id="wa-hint">Se abre WhatsApp con un mensaje listo sobre esta propiedad. Solo presiona <strong>Enviar</strong>.</p>` : ''}
+          <button id="det-fav-btn" class="btn-xl" style="padding:10px;border-radius:10px;border:1.5px solid #fed7aa;background:#fff8ed;color:#b45309;font-size:14px;font-weight:600;cursor:pointer;font-family:var(--f)"
             onclick="window.__toggleFavDetail('${prop.id}',this)">${isFav(prop.id)?'❤️ En favoritos':'🤍 Guardar'}</button>
-          ${!esPropia ? `<a class="btn-wa" href="${sanitize(waPropiedad(prop))}" target="_blank" rel="noopener noreferrer">${WA_ICON} Escribir por WhatsApp</a>` : ''}
           <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--bo);font-size:12px;color:var(--t3);line-height:2">
             👤 ${sanitize(prop.contacto?.nombre || 'Arrendador')}<br>
             ${prop.contacto?.telefono ? `📞 ${sanitize(prop.contacto.telefono)}<br>` : '<span>📞 Contacto vía INMOVISIÓN 360</span><br>'}
@@ -249,6 +292,26 @@ export async function openDetail(propId) {
     const ctr = ov.querySelector('#foto-counter');
     if (ctr) ctr.textContent=`${activePhoto+1} / ${photos.length}`;
   }
+}
+
+// ── Desglose mensual estimado (canon + administración + servicios) ──
+function desgloseHtml(prop) {
+  const d = desgloseMensual(prop);
+  if (!d) return '';
+  const fila = (lbl, val, nota = '') =>
+    `<div class="dsg-row"><span>${lbl}${nota ? `<small>${nota}</small>` : ''}</span><strong>${val}</strong></div>`;
+  return `
+    <div class="dsg" role="group" aria-labelledby="dsg-tit">
+      <div class="dsg-tit" id="dsg-tit">🧾 Desglose mensual estimado</div>
+      ${fila('Canon de arriendo', formatCOP(d.canon))}
+      ${d.admin != null
+        ? fila('Administración', formatCOP(d.admin))
+        : fila('Administración', '<span class="dsg-na">No informada</span>', 'Pregúntala al arrendador')}
+      ${fila('Servicios públicos', (d.servEst ? '≈ ' : '') + formatCOP(d.servicios),
+             d.servEst ? `Estimado para estrato ${sanitize(prop.estrato ?? '3')} y ${formatNum(prop.metros)} m²` : 'Valor informado por el arrendador')}
+      <div class="dsg-total"><span>Total al mes</span><strong>${d.servEst || d.admin == null ? '≈ ' : ''}${formatCOP(d.total)}</strong></div>
+      <p class="dsg-nota">Agua, energía y gas. Internet y otros consumos no incluidos.</p>
+    </div>`;
 }
 
 // ── WhatsApp ──────────────────────────────────────────────────
@@ -522,6 +585,9 @@ export async function openPropertyForm(propId = null) {
         </select></div>
         <div class="mf"><label>Precio (COP) *</label><input id="fp" inputmode="numeric" autocomplete="off" value="${prop?.precio ? formatNum(prop.precio) : ''}" placeholder="1.800.000"/></div>
         <div class="mf"><label>Estrato</label><select id="fest"><option value="">Sin estrato</option>${[1,2,3,4,5,6].map(e=>`<option value="${e}"${prop?.estrato===e?' selected':''}>${e}</option>`).join('')}</select></div>
+        <div class="mf"><label>Administración / mes <span style="font-weight:400;color:var(--t3)">— opcional</span></label><input id="fadm" inputmode="numeric" autocomplete="off" value="${prop?.administracion != null ? formatNum(prop.administracion) : ''}" placeholder="Ej: 350.000"/></div>
+        <div class="mf"><label>Servicios / mes <span style="font-weight:400;color:var(--t3)">— opcional</span></label><input id="fserv" inputmode="numeric" autocomplete="off" value="${prop?.serviciosEst != null ? formatNum(prop.serviciosEst) : ''}" placeholder="Vacío = se estima"/></div>
+        <p class="mf span2 form-hint">Con estos valores la ficha muestra a los interesados el costo total al mes. Si dejas los servicios vacíos, se estiman por estrato y área.</p>
       </div></div>
 
       <!-- Paso 2 -->
@@ -614,7 +680,7 @@ export async function openPropertyForm(propId = null) {
     if (err) return showToast(err, 'warning');
     if (currentStep<3) goStep(currentStep+1);
   };
-  bindMoneyInput(getEl('fp'));
+  bindMoneyInput(getEl('fp')); bindMoneyInput(getEl('fadm')); bindMoneyInput(getEl('fserv'));
   getEl('fbk').onclick = () => { if (currentStep>0) goStep(currentStep-1); };
 
   // ── Estado de fotos del wizard ──────────────────────────
@@ -700,6 +766,9 @@ export async function openPropertyForm(propId = null) {
       listing: getEl('fls').value, precio, metros,
       estrato:      parseInt(getEl('fest').value)||null,
       parqueaderos: parseInt(getEl('fpark').value)||0,
+      // Vacío = null: "no informada" (administración) o estimado (servicios)
+      administracion: Number.isFinite(parseCOP(getEl('fadm').value)) ? parseCOP(getEl('fadm').value) : null,
+      serviciosEst:   Number.isFinite(parseCOP(getEl('fserv').value)) ? parseCOP(getEl('fserv').value) : null,
       habitaciones, banos,
       fotos,
       descripcion: getEl('fdesc')?.value?.trim()||null,
@@ -818,27 +887,64 @@ export async function openSolicitarVisita(propId) {
   if (!prop) return;
   const ov = createOverlay();
   ov.style.zIndex = '600';
+  // Próximos 14 días; hoy solo si quedan horarios (con al menos 1 h de margen)
+  const dias = proximosDias(14).filter(d => horariosDisponibles(d.iso).length);
+  let fecha = dias[0]?.iso || '', hora = '';
+
   ov.innerHTML = `
-    <div class="modal-box" style="max-width:420px">
-      <div class="mh"><div><div class="mh-title">📅 Agendar visita</div><div class="mh-sub">${sanitize(prop.titulo)}</div></div><button class="btn-mx" id="svx">✕</button></div>
-      <div style="padding:24px 28px;display:flex;flex-direction:column;gap:16px">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
-          <div class="mf"><label>Fecha *</label><input id="svf" type="date" min="${today()}"/></div>
-          <div class="mf"><label>Hora *</label><input id="svh" type="time"/></div>
+    <div class="modal-box" style="max-width:520px">
+      <div class="mh"><div><div class="mh-title">📅 Agendar visita</div><div class="mh-sub">${sanitize(prop.titulo)}</div></div><button class="btn-mx" id="svx" aria-label="Cerrar">✕</button></div>
+      <div style="padding:20px 28px;display:flex;flex-direction:column;gap:18px">
+        ${helpSteps(['Toca el <strong>día</strong>', 'Toca la <strong>hora</strong>', 'El arrendador la confirma y la verás en <strong>Mis Visitas</strong>'])}
+        <div>
+          <div class="sv-lbl" id="sv-dias-lbl">1. ¿Qué día?</div>
+          <div class="sv-dias" role="radiogroup" aria-labelledby="sv-dias-lbl">
+            ${dias.map(d => `<button type="button" class="sv-dia${d.iso === fecha ? ' active' : ''}" role="radio" aria-checked="${d.iso === fecha}" data-dia="${d.iso}">
+              <span class="sv-dow">${d.etiqueta}</span><span class="sv-num">${d.num}</span><span class="sv-mes">${d.mes}</span></button>`).join('')}
+          </div>
         </div>
-        <div class="mf"><label>Nota para el arrendador</label><input id="svn" placeholder="Opcional" maxlength="300"/></div>
+        <div>
+          <div class="sv-lbl" id="sv-horas-lbl">2. ¿A qué hora?</div>
+          <div class="sv-horas" id="sv-horas" role="radiogroup" aria-labelledby="sv-horas-lbl"></div>
+        </div>
+        <div class="sv-resumen" id="sv-resumen" aria-live="polite"></div>
+        <div class="mf"><label for="svn">Nota para el arrendador <span style="font-weight:400;color:var(--t3)">— opcional</span></label><input id="svn" placeholder="Ej: voy con mi pareja" maxlength="300"/></div>
       </div>
       <div class="mf-foot">
-        <button class="btn-g" id="svc">Cancelar</button>
-        <button class="btn-a" id="svok">Solicitar visita</button>
+        <button class="btn-g btn-xl" id="svc">Cancelar</button>
+        <button class="btn-a btn-xl" id="svok" disabled>Solicitar visita</button>
       </div>
     </div>`;
+
+  const render = () => {
+    const horas = horariosDisponibles(fecha);
+    if (!horas.includes(hora)) hora = '';
+    const bloques = [['☀️ Mañana', horas.filter(h => h < '12:00')], ['🌤️ Tarde', horas.filter(h => h >= '12:00')]];
+    getEl('sv-horas').innerHTML = bloques.filter(b => b[1].length).map(([lbl, hs]) => `
+      <div class="sv-bloque"><span>${lbl}</span><div>${hs.map(h =>
+        `<button type="button" class="sv-hora${h === hora ? ' active' : ''}" role="radio" aria-checked="${h === hora}" data-hora="${h}">${hora12(h)}</button>`).join('')}</div></div>`).join('');
+    ov.querySelectorAll('.sv-dia').forEach(b => { const on = b.dataset.dia === fecha; b.classList.toggle('active', on); b.setAttribute('aria-checked', on); });
+    const dia = dias.find(d => d.iso === fecha);
+    getEl('sv-resumen').innerHTML = hora
+      ? `✅ Tu visita: <strong>${dia.largo}</strong> a las <strong>${hora12(hora)}</strong>`
+      : 'Elige una hora para continuar';
+    getEl('svok').disabled = !hora;
+  };
+  ov.querySelector('.sv-dias').addEventListener('click', (e) => {
+    const b = e.target.closest('.sv-dia'); if (!b) return;
+    fecha = b.dataset.dia; render();
+  });
+  getEl('sv-horas').addEventListener('click', (e) => {
+    const b = e.target.closest('.sv-hora'); if (!b) return;
+    hora = b.dataset.hora; render();
+    getEl('svok').focus({ preventScroll: true });
+  });
+  render();
 
   const close = () => ov.remove();
   getEl('svx').onclick = close; getEl('svc').onclick = close;
   getEl('svok').onclick = async () => {
-    const fecha = getEl('svf').value, hora = getEl('svh').value;
-    if (!fecha || !hora) return showToast('Elige fecha y hora','warning');
+    if (!fecha || !hora) return showToast('Elige el día y la hora','warning');
     try {
       await withLoading(getEl('svok'), () => solicitarVisita({ propId, fecha, hora, nota: getEl('svn').value.trim() || undefined }));
       close(); showToast('Visita solicitada ✓ — el arrendador debe confirmarla','success');
@@ -1271,6 +1377,7 @@ export async function openReportarPago() {
     <div class="modal-box" style="max-width:470px">
       <div class="mh"><div><div class="mh-title">Reportar pago</div><div class="mh-sub">El arrendador lo revisará y lo confirmará</div></div><button class="btn-mx" id="rpx">✕</button></div>
       <div style="padding:24px 28px;display:flex;flex-direction:column;gap:16px">
+        ${helpSteps(['Busca y elige la <strong>propiedad</strong> que arriendas', 'Escribe el <strong>monto</strong> y la fecha en que pagaste', 'Adjunta una <strong>foto del recibo</strong> o pantallazo (recomendado)'])}
         <div class="mf"><label>Propiedad de tu arriendo *</label>${propComboHtml('rpp')}</div>
         ${conceptoFieldHtml('rpcon', CONCEPTOS[0], false)}
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
@@ -1281,8 +1388,8 @@ export async function openReportarPago() {
         ${comprobanteFieldHtml()}
       </div>
       <div class="mf-foot">
-        <button class="btn-g" id="rpc">Cancelar</button>
-        <button class="btn-a" id="rpok">Reportar pago</button>
+        <button class="btn-g btn-xl" id="rpc">Cancelar</button>
+        <button class="btn-a btn-xl" id="rpok">Enviar reporte de pago</button>
       </div>
     </div>`;
 

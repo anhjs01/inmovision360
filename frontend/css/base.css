@@ -30,7 +30,7 @@
   /* Texto */
   --t1: #111827;
   --t2: #4b5563;
-  --t3: #9ca3af;
+  --t3: #6b7280;   /* gris de texto secundario: contraste 4,8:1 sobre blanco (WCAG AA) */
 
   /* Sombras */
   --sh:  0 1px 3px rgba(0,0,0,.06), 0 4px 16px rgba(0,0,0,.05);

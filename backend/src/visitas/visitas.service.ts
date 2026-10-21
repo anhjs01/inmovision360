@@ -39,6 +39,10 @@ export class VisitasService {
   async solicitar(user: any, dto: SolicitarVisitaDto) {
     const prop = await this.prisma.propiedad.findFirst({ where: { id: dto.propId, deletedAt: null } });
     if (!prop) throw new ApiException(ErrorCode.PROP_NOT_FOUND, 'Propiedad no encontrada', 'propId', HttpStatus.NOT_FOUND);
+    // Fecha de Colombia (el servidor puede estar en UTC): no se agendan visitas en días pasados
+    const hoyCO = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+    if (dto.fecha < hoyCO)
+      throw new ApiException(ErrorCode.VALIDATION_ERROR, 'La fecha de la visita ya pasó; elige hoy o un día futuro', 'fecha');
 
     return this.prisma.visitas.create({
       data: {

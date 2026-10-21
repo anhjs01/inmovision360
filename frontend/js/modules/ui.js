@@ -8,7 +8,7 @@ import { State, getMyProps, getAllProps, getMyVisitas, getMyPagos,
          getFavProps, isFav, getPlanes, getMiPlan } from './store.js';
 import { MensajesApi, EstadisticasApi, UsuariosApi, VisitasApi, mediaUrl } from '../api.js';
 import { formatCOP, formatShort, formatNum, formatFecha, sanitize, capitalize, getEl,
-         CITY_LABELS, AMENITY_LABELS, LISTING_LABELS, PLAN_COLORS } from '../utils.js';
+         CITY_LABELS, AMENITY_LABELS, LISTING_LABELS, PLAN_COLORS, ESTILOS_VIDA } from '../utils.js';
 
 let currentView = '';
 let selectedMsg  = null;
@@ -283,6 +283,7 @@ async function renderMisProps(el) {
 async function renderCatalogo(el) {
   var filters  = {};
   var tourOnly = false;
+  var estilos  = [];  // accesos rápidos de estilo de vida activos (se combinan)
   var page     = 1;
   var reqSeq   = 0;   // descarta respuestas viejas si el usuario cambia de filtro antes de que lleguen
   var qTimer   = null;
@@ -333,12 +334,13 @@ async function renderCatalogo(el) {
   }
 
   function hasFilters() {
-    return !!(filters.tipo || filters.ciudad || filters.q || filters.tour_virtual || (filters.sort && filters.sort !== 'default'));
+    return !!(filters.tipo || filters.ciudad || filters.q || filters.tour_virtual || filters.estilo || (filters.sort && filters.sort !== 'default'));
   }
 
   window.__reloadCatalog = function() { reloadCatalog(false); };
   window.__clearCatFilters = function() {
-    filters = {}; tourOnly = false;
+    filters = {}; tourOnly = false; estilos = [];
+    el.querySelectorAll('[data-estilo]').forEach(function(x) { x.classList.remove('active'); x.setAttribute('aria-pressed', 'false'); });
     el.querySelectorAll('[data-ct]').forEach(function(x) { x.classList.toggle('active', x.dataset.ct === 'all'); });
     var q = getEl('cat-q'); if (q) q.value = '';
     var s = getEl('cat-sort'); if (s) s.value = 'default';
@@ -355,6 +357,16 @@ async function renderCatalogo(el) {
         '<div class="srch-box"><span>🔍</span><input type="text" id="cat-q" placeholder="Buscar…"/></div>' +
         '<select class="srt-sel" id="cat-sort"><option value="default">Destacados</option><option value="precio_asc">Precio ↑</option><option value="precio_desc">Precio ↓</option><option value="area_desc">Área</option></select>' +
       '</div>' +
+    '</div>' +
+    '<div class="estilo-sec" role="group" aria-label="Filtrar por estilo de vida">' +
+      '<div class="estilo-tit">¿Qué necesitas en tu nuevo hogar? <span>Toca una o varias opciones</span></div>' +
+      '<div class="estilo-grid">' + ESTILOS_VIDA.map(function(e) {
+        return '<button type="button" class="estilo-btn" data-estilo="' + e.id + '" aria-pressed="false">' +
+          '<span class="estilo-ico" aria-hidden="true">' + e.ico + '</span>' +
+          '<span class="estilo-txt"><strong>' + sanitize(e.lbl) + '</strong><small>' + sanitize(e.sub) + '</small></span>' +
+          '<span class="estilo-check" aria-hidden="true">✓</span>' +
+        '</button>';
+      }).join('') + '</div>' +
     '</div>' +
     '<div class="filter-bar-d">' +
       ['','apartamento','casa','villa','loft','estudio'].map(function(t) {
@@ -374,6 +386,18 @@ async function renderCatalogo(el) {
     b.addEventListener('click', function() {
       if (b.dataset.ct === 'all') delete filters.tipo; else filters.tipo = b.dataset.ct;
       el.querySelectorAll('[data-ct]').forEach(function(x) { x.classList.toggle('active', x === b); });
+      reloadCatalog(false);
+    });
+  });
+
+  // Estilo de vida: alterna sin recargar la página; varias opciones se combinan (todas deben cumplirse)
+  el.querySelectorAll('[data-estilo]').forEach(function(b) {
+    b.addEventListener('click', function() {
+      var id = b.dataset.estilo, i = estilos.indexOf(id);
+      if (i === -1) estilos.push(id); else estilos.splice(i, 1);
+      b.classList.toggle('active', i === -1);
+      b.setAttribute('aria-pressed', String(i === -1));
+      if (estilos.length) filters.estilo = estilos.join(','); else delete filters.estilo;
       reloadCatalog(false);
     });
   });
@@ -805,7 +829,8 @@ async function renderMisPagos(el) {
 
   el.innerHTML =
     '<div class="topbar"><div><h1 class="pg-title">Mis Pagos</h1><p class="pg-sub">Historial de pagos y planes</p></div>' +
-    '<button class="btn-a" onclick="window.__reportarPago()">+ Reportar pago</button></div>' +
+    '<div class="cta-hint"><button class="btn-a btn-xl" onclick="window.__reportarPago()" aria-describedby="rp-hint">🧾 Reportar pago</button>' +
+      '<span id="rp-hint">¿Pagaste por transferencia o en efectivo? Avísale aquí a tu arrendador.</span></div></div>' +
     pagosTabsHtml() +
     '<div class="kpi-grid">' +
       kpiCard('💰','#f0fdf4','Total pagado', formatShort(sumMonto(pagos,'pagado')), 'COP') +

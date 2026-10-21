@@ -1087,3 +1087,81 @@ body[data-view="mensajes"] .wa-float { display: none; }
 .pc-tit { font-size: 13.5px; font-weight: 600; color: var(--t1); }
 .pc-sub { font-size: 11.5px; color: var(--t3); margin-top: 1px; }
 .pc-empty { padding: 14px 10px; font-size: 13px; color: var(--t3); text-align: center; }
+
+/* ── Explorar: accesos rápidos de estilo de vida ────────────── */
+.estilo-sec { padding: 18px 28px 0; }
+.estilo-tit { font-size: 15px; font-weight: 700; color: var(--t1); margin-bottom: 10px; }
+.estilo-tit span { font-size: 13px; font-weight: 400; color: var(--t2); margin-left: 6px; }
+.estilo-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+.estilo-btn { position: relative; display: flex; align-items: center; gap: 12px; min-height: 72px; padding: 12px 16px; text-align: left; background: #fff; border: 2px solid var(--bo); border-radius: 16px; cursor: pointer; font-family: var(--f); transition: .15s; }
+.estilo-btn:hover { border-color: var(--pr); box-shadow: var(--sh); }
+.estilo-ico { font-size: 30px; line-height: 1; flex-shrink: 0; }
+.estilo-txt { display: flex; flex-direction: column; gap: 2px; }
+.estilo-txt strong { font-size: 14.5px; color: var(--t1); }
+.estilo-txt small { font-size: 12px; color: var(--t2); }
+.estilo-check { position: absolute; top: 8px; right: 10px; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 800; color: #fff; background: var(--ac); opacity: 0; transform: scale(.6); transition: .15s; }
+.estilo-btn.active { border-color: var(--ac); background: #f0fdf4; }
+.estilo-btn.active .estilo-check { opacity: 1; transform: none; }
+
+/* ── Ficha: columna lateral y desglose mensual ─────────────── */
+.det-grid { display: grid; grid-template-columns: 1fr 300px; gap: 20px; padding: 20px; }
+.det-side { background: #f9fafb; border: 1px solid var(--bo); border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 10px; align-self: start; }
+.dsg { background: #fff; border: 1.5px solid #d0d9f0; border-radius: 14px; padding: 14px; margin: 4px 0 6px; }
+.dsg-tit { font-size: 13px; font-weight: 800; color: var(--pr); margin-bottom: 8px; }
+.dsg-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; padding: 6px 0; border-bottom: 1px dashed var(--bo); font-size: 13px; color: var(--t2); }
+.dsg-row span { display: flex; flex-direction: column; }
+.dsg-row small { font-size: 11px; color: var(--t3); margin-top: 1px; }
+.dsg-row strong { color: var(--t1); white-space: nowrap; }
+.dsg-na { font-weight: 500; color: var(--t3); }
+.dsg-total { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: var(--pr); color: #fff; font-size: 13px; font-weight: 600; }
+.dsg-total span, .dsg-total strong { white-space: nowrap; }
+.dsg-total strong { font-size: 18px; font-weight: 800; }
+.dsg-nota { font-size: 11px; color: var(--t3); margin-top: 8px; line-height: 1.4; }
+@media (max-width: 760px) {
+  .det-grid { grid-template-columns: 1fr; padding: 16px; }
+}
+
+/* ── Agendar visita: días y horas ───────────────────────────── */
+.sv-lbl { font-size: 14px; font-weight: 700; color: var(--t1); margin-bottom: 8px; }
+.sv-dias { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 6px; scroll-snap-type: x mandatory; }
+.sv-dia { flex: 0 0 68px; scroll-snap-align: start; display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 9px 4px; background: #fff; border: 2px solid var(--bo); border-radius: 14px; cursor: pointer; font-family: var(--f); color: var(--t2); transition: .15s; }
+.sv-dow { font-size: 11.5px; font-weight: 700; }
+.sv-num { font-size: 21px; font-weight: 800; color: var(--t1); line-height: 1.1; }
+.sv-mes { font-size: 11px; text-transform: lowercase; }
+.sv-dia:hover, .sv-hora:hover { border-color: var(--pr); }
+.sv-dia.active { border-color: var(--pr); background: var(--pr); color: #dbe4ff; }
+.sv-dia.active .sv-num { color: #fff; }
+.sv-bloque { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.sv-bloque > span { font-size: 12px; font-weight: 700; color: var(--t2); }
+.sv-bloque > div { display: grid; grid-template-columns: repeat(auto-fill, minmax(98px, 1fr)); gap: 8px; }
+.sv-hora { min-height: 46px; background: #fff; border: 2px solid var(--bo); border-radius: 12px; font-size: 14px; font-weight: 600; color: var(--t1); cursor: pointer; font-family: var(--f); transition: .15s; }
+.sv-hora.active { border-color: var(--ac); background: var(--ac); color: #fff; }
+.sv-resumen { padding: 12px 14px; border-radius: 12px; background: #f3f4f6; font-size: 14px; color: var(--t2); }
+.sv-resumen strong { color: var(--t1); }
+
+/* ── Ayudas para procesos clave ─────────────────────────────── */
+.help-steps { list-style: none; counter-reset: paso; margin: 0; padding: 12px 14px; display: flex; flex-direction: column; gap: 7px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 12px; }
+.help-steps li { counter-increment: paso; display: flex; align-items: center; gap: 10px; font-size: 13.5px; color: #1e3a8a; line-height: 1.35; }
+.help-steps li::before { content: counter(paso); flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: #1e3a8a; color: #fff; font-size: 12px; font-weight: 800; }
+.btn-hint { font-size: 12px; color: var(--t2); margin: -4px 2px 4px; line-height: 1.4; }
+.form-hint { font-size: 12.5px; color: var(--t2); line-height: 1.45; margin: 0; }
+.cta-hint { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; max-width: 300px; }
+.cta-hint span { font-size: 12px; color: var(--t2); text-align: right; }
+@media (max-width: 600px) { .cta-hint { align-items: stretch; max-width: none; } .cta-hint span { text-align: left; } }
+
+/* ── Accesibilidad ──────────────────────────────────────────── */
+/* Botones principales grandes y fáciles de tocar */
+.btn-xl { min-height: 48px; font-size: 14.5px; justify-content: center; }
+/* Foco visible al navegar con teclado */
+:focus-visible { outline: 3px solid #2563eb; outline-offset: 2px; }
+.mf input:focus-visible, .mf select:focus-visible, .mf textarea:focus-visible { outline: none; }
+/* En pantallas táctiles: objetivos de al menos 44 px */
+@media (pointer: coarse) {
+  .btn-a, .btn-g, .btn-p, .btn-d, .btn-wa { min-height: 44px; }
+  .fb-chip, .vt { min-height: 40px; }
+  .mf input, .mf select { min-height: 44px; }
+}
+/* Sin animaciones para quien las desactivó en su sistema */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}

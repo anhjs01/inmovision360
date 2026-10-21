@@ -101,9 +101,39 @@ export const AMENITY_LABELS = {
   gimnasio:   '💪 Gimnasio',
   parqueadero:'🚗 Parqueadero',
   terraza:    '🌿 Terraza',
+  balcon:     '🪟 Balcón',
   mascotas:   '🐾 Mascotas',
   amoblado:   '🛏️ Amoblado',
 };
+
+// Accesos rápidos de Explorar (?estilo=…; el backend define qué cuenta como cada uno)
+export const ESTILOS_VIDA = [
+  { id: 'mascotas',    ico: '🐾', lbl: 'Acepta mascotas',        sub: 'Perros y gatos bienvenidos' },
+  { id: 'balcon',      ico: '🪟', lbl: 'Con balcón',             sub: 'Balcón o terraza propia' },
+  { id: 'parqueadero', ico: '🚗', lbl: 'Parqueadero incluido',   sub: 'Al menos un cupo' },
+  { id: 'amoblado',    ico: '🛋️', lbl: 'Amoblado',               sub: 'Listo para mudarse' },
+];
+
+// ── Costo mensual estimado (canon + administración + servicios) ──
+// Servicios públicos (agua, energía, gas) de referencia para ~70 m², por estrato.
+// Son valores orientativos: la ficha los muestra como "estimado" si el arrendador no los informó.
+const SERVICIOS_POR_ESTRATO = { 1: 90000, 2: 130000, 3: 190000, 4: 260000, 5: 340000, 6: 420000 };
+
+export function estimarServicios(estrato, metros) {
+  const base   = SERVICIOS_POR_ESTRATO[estrato] || SERVICIOS_POR_ESTRATO[3];
+  const factor = Math.min(1.6, Math.max(0.7, (Number(metros) || 70) / 70));
+  return Math.round(base * factor / 10000) * 10000;
+}
+
+// null si no aplica (venta). admin null = no informada (no se inventa)
+export function desgloseMensual(prop) {
+  if (!prop || prop.listing === 'sale') return null;
+  const canon     = Number(prop.precio) || 0;
+  const admin     = prop.administracion ?? null;
+  const servEst   = prop.serviciosEst == null;
+  const servicios = servEst ? estimarServicios(prop.estrato, prop.metros) : prop.serviciosEst;
+  return { canon, admin, servicios, servEst, total: canon + (admin || 0) + servicios };
+}
 
 export const LISTING_LABELS = {
   rent:      'Arriendo',
