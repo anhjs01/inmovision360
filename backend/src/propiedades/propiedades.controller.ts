@@ -2,23 +2,37 @@ import { Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards } f
 import { PropiedadesService } from './propiedades.service';
 import { CurrentUser }        from '../common/decorators/current-user.decorator';
 import { Public, Roles }      from '../common/decorators/roles.decorator';
-import { CreatePropiedadDto, UpdatePropiedadDto } from './dto/propiedad.dto';
+import { CreatePropiedadDto, UpdatePropiedadDto, SolicitarCierreDto, ResolverCierreDto } from './dto/propiedad.dto';
 import { OptionalJwtGuard }   from '../auth/guards/optional-jwt.guard';
 
 @Controller('propiedades')
 export class PropiedadesController {
   constructor(private svc: PropiedadesService) {}
 
-  @Public() @Get()
-  findAll(@Query() q: any) { return this.svc.findAll(q); }
+  // Pública: catálogo de la landing sin token. Con sesión, las tarjetas traen el WhatsApp del arrendador
+  @Public() @UseGuards(OptionalJwtGuard) @Get()
+  findAll(@Query() q: any, @CurrentUser() u: any) { return this.svc.findAll(q, !!u); }
 
   @Get('mias')
   @Roles('arrendador')
   findMias(@CurrentUser() u: any) { return this.svc.findMias(u.id); }
 
+  // Inquilino: inmuebles activos (reservados, arrendados o comprados)
+  @Get('mi-hogar')
+  @Roles('inquilino')
+  findMiHogar(@CurrentUser() u: any) { return this.svc.findMiHogar(u.id); }
+
   // Pública, pero si llega un token se incluye el teléfono del arrendador (contacto por WhatsApp)
   @Public() @UseGuards(OptionalJwtGuard) @Get(':id')
-  findOne(@Param('id') id: string, @CurrentUser() u: any) { return this.svc.findOne(id, !!u); }
+  findOne(@Param('id') id: string, @CurrentUser() u: any) { return this.svc.findOne(id, u?.id ?? null); }
+
+  @Post(':id/cierre')
+  @Roles('inquilino')
+  solicitarCierre(@Param('id') id: string, @CurrentUser() u: any, @Body() b: SolicitarCierreDto) { return this.svc.solicitarCierre(id, u, b.tipo); }
+
+  @Patch(':id/cierre')
+  @Roles('arrendador')
+  resolverCierre(@Param('id') id: string, @CurrentUser() u: any, @Body() b: ResolverCierreDto) { return this.svc.resolverCierre(id, u.id, b.accion); }
 
   @Post()
   @Roles('arrendador')

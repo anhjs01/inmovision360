@@ -5,17 +5,19 @@
 
 import { State, getMyProps, getAllProps, getMyVisitas, getMyPagos,
          getKPIs, getLeads, getMensajes, getUnreadCount, updateLead,
-         getFavProps, isFav, getPlanes, getMiPlan } from './store.js';
-import { MensajesApi, EstadisticasApi, UsuariosApi, VisitasApi, mediaUrl } from '../api.js';
+         getFavProps, isFav, getPlanes, getMiPlan, getMiHogar } from './store.js';
+import { MensajesApi, EstadisticasApi, UsuariosApi, VisitasApi, PropiedadesApi, mediaUrl } from '../api.js';
 import { formatCOP, formatShort, formatNum, formatFecha, sanitize, capitalize, getEl,
-         CITY_LABELS, AMENITY_LABELS, LISTING_LABELS, PLAN_COLORS, ESTILOS_VIDA } from '../utils.js';
+         AMENITY_LABELS, LISTING_LABELS, PLAN_COLORS, ESTILOS_VIDA, WA_ICON, ESTADO_PROP,
+         cityKey, cityLabel, citiesDatalistHtml, waPropiedad, waLink, waNumber, waMensajePropiedad,
+         videoEmbedUrl, esVip, PLAN_VIP, WA_PLANTILLA_DEFAULT, WA_VARIABLES } from '../utils.js';
 
 let currentView = '';
 let selectedMsg  = null;
 
 const RBAC = {
   arrendador: ['panel','catalogo','mis-props','visitas','mensajes','crm','estadisticas','pagos','suscripcion','configuracion'],
-  inquilino:  ['catalogo','favoritos','mis-visitas','mis-pagos','mensajes','suscripcion','configuracion'],
+  inquilino:  ['catalogo','favoritos','mi-hogar','mis-visitas','mis-pagos','mensajes','suscripcion','configuracion'],
 };
 
 const NAV_ARRENDADOR = [
@@ -27,8 +29,8 @@ const NAV_ARRENDADOR = [
 
 const NAV_INQUILINO = [
   { sec:'Explorar',      items:[{v:'catalogo',ico:'🏘️',lbl:'Explorar'},{v:'favoritos',ico:'❤️',lbl:'Favoritos',badge:'nb-fav'}] },
-  { sec:'Mis Arriendos', items:[{v:'mis-visitas',ico:'📅',lbl:'Mis Visitas'},{v:'mis-pagos',ico:'💳',lbl:'Mis Pagos'},{v:'mensajes',ico:'💬',lbl:'Mensajes',badge:'nb-m'}] },
-  { sec:'Cuenta',        items:[{v:'suscripcion',ico:'⭐',lbl:'Planes'},{v:'configuracion',ico:'⚙️',lbl:'Configuración'}] },
+  { sec:'Mis Arriendos', items:[{v:'mi-hogar',ico:'🏠',lbl:'Mi Hogar'},{v:'mis-visitas',ico:'📅',lbl:'Mis Visitas'},{v:'mis-pagos',ico:'💳',lbl:'Mis Pagos'},{v:'mensajes',ico:'💬',lbl:'Mensajes',badge:'nb-m'}] },
+  { sec:'Cuenta',        items:[{v:'suscripcion',ico:'⭐',lbl:'Inquilino VIP'},{v:'configuracion',ico:'⚙️',lbl:'Configuración'}] },
 ];
 
 // ── Toast ──────────────────────────────────────────────────────
@@ -74,6 +76,44 @@ export async function initApp(user) {
   updateSidebarProfile();
   await showView(user.rol === 'arrendador' ? 'panel' : 'catalogo');
   showToast('Bienvenido/a, ' + user.nombre + ' 👋', 'success');
+  if (esVip(user)) setTimeout(revisarAlertasVip, 1500);   // después del saludo
+}
+
+// ── Alertas del Pass VIP ───────────────────────────────────────
+// El inquilino VIP guarda sus filtros de Explorar; al entrar se le avisa de lo publicado
+// desde su última revisión que cumpla esos filtros. Se guarda solo en este navegador.
+function alertaKey() { return 'vip_alerta_' + (State.session ? State.session.id : ''); }
+
+export function getAlertaVip() {
+  try { return JSON.parse(localStorage.getItem(alertaKey()) || 'null'); } catch (e) { return null; }
+}
+
+function setAlertaVip(alerta) {
+  try {
+    if (alerta) localStorage.setItem(alertaKey(), JSON.stringify(alerta));
+    else localStorage.removeItem(alertaKey());
+    return true;
+  } catch (e) { return false; }
+}
+
+export async function revisarAlertasVip() {
+  var alerta = getAlertaVip();
+  if (!alerta || !esVip(State.session)) return;
+  var r = await PropiedadesApi.findAll(Object.assign({}, alerta.filtros, { desde: alerta.revisada, limit: 50 }));
+  if (!r || !r.ok) return;
+  setAlertaVip(Object.assign({}, alerta, { revisada: new Date().toISOString() }));
+  var n = r.data.length;
+  if (n) showToast('⭐ Alerta VIP: ' + n + ' inmueble' + (n === 1 ? ' nuevo cumple' : 's nuevos cumplen') + ' tus filtros', 'info', 6000);
+}
+
+function describirFiltros(f) {
+  var partes = [];
+  if (f.tipo)   partes.push(capitalize(f.tipo));
+  if (f.ciudad) partes.push(cityLabel(f.ciudad));
+  if (f.q)      partes.push('"' + f.q + '"');
+  if (f.estilo) partes.push(f.estilo.split(',').map(function(e) { var x = ESTILOS_VIDA.find(function(s) { return s.id === e; }); return x ? x.lbl : e; }).join(', '));
+  if (f.tour_virtual) partes.push('con tour 3D');
+  return partes.join(' · ') || 'todas las propiedades';
 }
 
 function buildSidebarNav(rol) {
@@ -104,7 +144,9 @@ export function updateSidebarProfile() {
   const avEl = getEl('sp-av'); const nmEl = getEl('sp-name'); const rlEl = getEl('sp-role');
   if (avEl) avEl.textContent = ini;
   if (nmEl) nmEl.textContent = (user.nombre + ' ' + (user.apellido ?? '')).trim();
-  if (rlEl) rlEl.textContent = (user.rol === 'arrendador' ? 'Arrendador' : 'Inquilino') + ' · ' + capitalize(user.plan ?? 'free');
+  if (rlEl) rlEl.textContent = user.rol === 'arrendador'
+    ? 'Arrendador · ' + capitalize(user.plan ?? 'free')
+    : esVip(user) ? 'Inquilino VIP · ✔ Verificado' : 'Inquilino · Básico';
 }
 
 export async function showView(name) {
@@ -124,7 +166,7 @@ export async function showView(name) {
     visitas: renderVisitas, mensajes: renderMensajes, estadisticas: renderEstadisticas,
     pagos: renderPagos, configuracion: renderConfiguracion, crm: renderCRM,
     suscripcion: renderSuscripcion, favoritos: renderFavoritos,
-    'mis-visitas': renderMisVisitas, 'mis-pagos': renderMisPagos,
+    'mis-visitas': renderMisVisitas, 'mis-pagos': renderMisPagos, 'mi-hogar': renderMiHogar,
   };
   if (renderers[name]) await renderers[name](el);
   await updateBadges();
@@ -200,16 +242,42 @@ function buildPropertyCard(p, mode) {
     ? '<img src="' + sanitize(mainPhoto) + '" loading="lazy" alt="' + sanitize(p.titulo) + '" onerror="this.replaceWith(Object.assign(document.createElement(\'div\'),{className:\'pc-noimg\',textContent:\'🏠\'}))">'
     : '<div class="pc-noimg">🏠</div>';
 
-  const actions = mode === 'owner'
-    ? '<button class="pc-btn pc-btn-soft" onclick="event.stopPropagation();window.__openForm(\'' + id + '\')">✏️ Editar</button>' +
-      '<button class="pc-btn pc-btn-del" title="Eliminar" onclick="event.stopPropagation();window.__confirmDel(\'' + id + '\')">🗑️</button>'
-    : '<button class="pc-btn pc-btn-main" onclick="event.stopPropagation();window.__openDetail(\'' + id + '\')">Ver detalles</button>';
+  const estado   = p.estado || 'disponible';
+  const user     = State.session;
+  const esPropia = !!user && user.id === p.ownerId;
+  const esInq    = !!user && user.rol === 'inquilino';
+
+  let actions;
+  if (mode === 'owner') {
+    actions = ownerCierreActions(p, id) +
+      '<button class="pc-btn pc-btn-soft" onclick="event.stopPropagation();window.__openForm(\'' + id + '\')">✏️ Editar</button>' +
+      '<button class="pc-btn pc-btn-del" title="Eliminar" aria-label="Eliminar" onclick="event.stopPropagation();window.__confirmDel(\'' + id + '\')">🗑️</button>';
+  } else {
+    // Atajos sin entrar al detalle: agendar cita (inquilino) y WhatsApp directo con el arrendador
+    const wa = waPropiedad(p);
+    actions =
+      (esInq && !esPropia && estado === 'disponible'
+        ? '<button class="pc-btn pc-btn-agenda" onclick="event.stopPropagation();window.__solicitarVisita(\'' + id + '\')">📅 Agendar cita</button>'
+        : '') +
+      (!esPropia
+        ? '<a class="pc-btn pc-btn-wa" href="' + sanitize(wa.href) + '" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()"' +
+            ' title="' + (wa.directo ? 'Escribir al arrendador por WhatsApp' : 'El arrendador no registró WhatsApp: te atiende soporte') + '"' +
+            ' aria-label="WhatsApp ' + (wa.directo ? 'del arrendador' : 'de soporte') + '">' + WA_ICON + '</a>'
+        : '') +
+      '<button class="pc-btn pc-btn-main" onclick="event.stopPropagation();window.__openDetail(\'' + id + '\')">Ver detalles</button>';
+  }
 
   const fav = mode === 'owner' ? '' :
     '<button class="pc-fav-d" title="Guardar en favoritos" onclick="event.stopPropagation();window.__toggleFavBtn(\'' + id + '\',this)">' + (isFav(p.id) ? '❤️' : '🤍') + '</button>';
 
   const tour = p.tourVirtual && p.tourUrl
     ? '<button class="pc-tour-d" title="Ver tour virtual" onclick="event.stopPropagation();window.__openTour(\'' + id + '\')">🥽 ' + sanitize(p.tourTipo || 'Tour 360°') + ' <span>▶</span></button>'
+    : '';
+  const video = videoEmbedUrl(p.video)
+    ? '<button class="pc-video-d' + (tour ? ' pc-video-low' : '') + '" title="Ver video" onclick="event.stopPropagation();window.__openVideo(\'' + id + '\')">🎬 Video <span>▶</span></button>'
+    : '';
+  const estadoBadgeHtml = estado !== 'disponible'
+    ? '<span class="pc-estado-d ' + ((ESTADO_PROP[estado] || {}).cls || 'b-w') + '">' + sanitize((ESTADO_PROP[estado] || {}).lbl || estado) + '</span>'
     : '';
 
   return '<article class="prop-card" onclick="window.__openDetail(\'' + id + '\')">' +
@@ -218,8 +286,9 @@ function buildPropertyCard(p, mode) {
       '<div class="pc-top-d">' +
         '<span class="pc-type-d">' + sanitize(p.tipo) + '</span>' +
         (p.destacado ? '<span class="pc-feat-d">⭐ Destacado</span>' : '') +
+        estadoBadgeHtml +
       '</div>' +
-      fav + tour +
+      fav + tour + video +
       (nFotos > 1 ? '<span class="pc-nfotos-d">📷 ' + nFotos + '</span>' : '') +
       '<div class="pc-price-d">' + formatCOP(p.precio) + '<small> ' + priceUnit(p.listing) + '</small></div>' +
     '</div>' +
@@ -229,7 +298,12 @@ function buildPropertyCard(p, mode) {
         (p.estrato ? '<span class="strato-badge">Estrato ' + sanitize(p.estrato) + '</span>' : '') +
       '</div>' +
       '<div class="pc-tit" title="' + sanitize(p.titulo) + '">' + sanitize(p.titulo) + '</div>' +
-      '<div class="pc-lc">📍 ' + sanitize(CITY_LABELS[p.ciudad] || p.ciudad) + (p.barrio ? ' · ' + sanitize(p.barrio) : '') + '</div>' +
+      '<div class="pc-lc">📍 ' + sanitize(cityLabel(p.ciudad)) + (p.barrio ? ' · ' + sanitize(p.barrio) : '') + '</div>' +
+      (mode === 'owner' && p.inquilinoActual
+        ? '<div class="pc-inq-d">👤 ' + sanitize([p.inquilinoActual.nombre, p.inquilinoActual.apellido].filter(Boolean).join(' ')) +
+            (p.inquilinoActual.plan === PLAN_VIP ? ' <span class="vip-badge" title="Inquilino con Pass VIP">✔ Verificado VIP</span>' : '') +
+            (estado === 'reservada' ? ' quiere ' + (p.cierreTipo === 'compra' ? 'comprarla' : 'arrendarla') : '') + '</div>'
+        : '') +
       '<div class="pc-st">' +
         '<span title="Habitaciones">🛏️ <strong>' + formatNum(p.habitaciones) + '</strong> hab.</span>' +
         '<span title="Baños">🚿 <strong>' + formatNum(p.banos) + '</strong> baños</span>' +
@@ -240,6 +314,16 @@ function buildPropertyCard(p, mode) {
     '</div>' +
     '<div class="pc-acts">' + actions + '</div>' +
   '</article>';
+}
+
+// Acciones del arrendador según el estado del cierre (reservada → confirmar/rechazar; cerrada → volver a publicar)
+function ownerCierreActions(p, id) {
+  var btn = function(accion, lbl, cls) {
+    return '<button class="pc-btn ' + cls + '" onclick="event.stopPropagation();window.__resolverCierre(\'' + id + '\',\'' + accion + '\')">' + lbl + '</button>';
+  };
+  if (p.estado === 'reservada') return btn('confirmar', '✅ Confirmar', 'pc-btn-ok') + btn('rechazar', 'Rechazar', 'pc-btn-del');
+  if (p.estado === 'arrendada' || p.estado === 'vendida') return btn('liberar', '↺ Publicar', 'pc-btn-soft');
+  return '';
 }
 
 // ── Panel ──────────────────────────────────────────────────────
@@ -372,11 +456,13 @@ async function renderCatalogo(el) {
       ['','apartamento','casa','villa','loft','estudio'].map(function(t) {
         return '<button class="fb-chip' + (!t ? ' active' : '') + '" data-ct="' + (t || 'all') + '">' + (t ? capitalize(t) : '🏘️ Todos') + '</button>';
       }).join('') +
-      '<select class="srt-sel" id="cat-city"><option value="">Todas las ciudades</option>' +
-        Object.entries(CITY_LABELS).map(function(entry) { return '<option value="' + entry[0] + '">' + entry[1] + '</option>'; }).join('') +
-      '</select>' +
+      '<input class="srt-sel city-input" id="cat-city" list="cat-ciudades" autocomplete="off" maxlength="60" placeholder="📍 Cualquier ciudad de LATAM…" aria-label="Filtrar por ciudad"/>' +
+      citiesDatalistHtml('cat-ciudades') +
       '<button class="fb-chip" id="tour-chip-d">🥽 Solo Tour 3D</button>' +
       '<button class="fb-chip fb-clear" id="cat-clear" style="display:none" onclick="window.__clearCatFilters()">✕ Limpiar</button>' +
+      (user.rol === 'inquilino'
+        ? '<button class="fb-chip fb-vip" id="cat-alerta" title="Pass VIP: te avisamos cuando se publique algo con estos filtros">🔔 ' + (getAlertaVip() ? 'Alerta activa' : 'Crear alerta') + '</button>'
+        : '') +
     '</div>' +
     '<div class="prop-grid-d" id="cat-grid"><div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--t3)">⏳ Cargando…</div></div>' +
     '<div style="display:flex;justify-content:center;padding:0 28px 36px"><button class="btn-g" id="cat-more" style="display:none;min-width:200px">Cargar más</button></div>';
@@ -416,10 +502,29 @@ async function renderCatalogo(el) {
     reloadCatalog(false);
   });
 
+  // Ciudad: se puede elegir de la lista o escribir cualquier ciudad/municipio (búsqueda sin tildes)
   var citySel = getEl('cat-city');
-  if (citySel) citySel.addEventListener('change', function(e) {
-    if (e.target.value) filters.ciudad = e.target.value; else delete filters.ciudad;
-    reloadCatalog(false);
+  var cityTimer = null;
+  if (citySel) citySel.addEventListener('input', function(e) {
+    var key = cityKey(e.target.value);
+    if (key) filters.ciudad = key; else delete filters.ciudad;
+    clearTimeout(cityTimer);
+    cityTimer = setTimeout(function() { reloadCatalog(false); }, 350);
+  });
+
+  // Pass VIP: guarda los filtros actuales como alerta de nuevos inmuebles
+  var alertaBtn = getEl('cat-alerta');
+  if (alertaBtn) alertaBtn.addEventListener('click', function() {
+    if (!esVip(State.session)) {
+      showToast('Las alertas inmediatas son parte del Pass Inquilino VIP ⭐', 'info', 4500);
+      showView('suscripcion');
+      return;
+    }
+    var f = {};
+    ['tipo', 'ciudad', 'q', 'estilo', 'tour_virtual'].forEach(function(k) { if (filters[k]) f[k] = filters[k]; });
+    if (!setAlertaVip({ filtros: f, revisada: new Date().toISOString() })) { showToast('Tu navegador no permite guardar la alerta', 'error'); return; }
+    alertaBtn.textContent = '🔔 Alerta activa';
+    showToast('Alerta guardada: ' + describirFiltros(f) + '. Te avisaremos de lo nuevo al entrar.', 'success', 5000);
   });
 
   var tourChip = getEl('tour-chip-d');
@@ -440,11 +545,13 @@ async function renderCatalogo(el) {
 async function renderVisitas(el) {
   const visitas = await getMyVisitas();
   var cols = '1fr 1.3fr .8fr .6fr 1.8fr';
+  // El backend ya pone primero las solicitudes de inquilinos VIP (postulación prioritaria)
   var rows = visitas.map(function(v, i) {
     var propTitulo = (v.inquilino && v.inquilino.titulo) ? v.inquilino.titulo : '—';
     var toggle = v.estado === 'pendiente' ? 'Confirmar' : v.estado === 'confirmada' ? 'Desconfirmar' : 'Reabrir';
-    return '<div class="t-row" style="grid-template-columns:' + cols + ';background:' + (i % 2 ? '#f9fafb' : '#fff') + '">' +
-      '<span style="font-size:13px;font-weight:600">' + sanitize(v.cliente) + '</span>' +
+    return '<div class="t-row' + (v.vip ? ' t-row-vip' : '') + '" style="grid-template-columns:' + cols + ';background:' + (v.vip ? '#fffbeb' : i % 2 ? '#f9fafb' : '#fff') + '">' +
+      '<span style="font-size:13px;font-weight:600">' + sanitize(v.cliente) +
+        (v.vip ? ' <span class="vip-badge" title="Inquilino con Pass VIP: perfil verificado y postulación prioritaria">✔ Verificado VIP</span>' : '') + '</span>' +
       '<span style="font-size:12.5px;color:var(--t2)">' + sanitize(propTitulo) + '</span>' +
       '<span style="font-size:12.5px;color:var(--t2)">' + sanitize(v.fecha) + '</span>' +
       '<span style="font-size:12.5px;color:var(--t2)">' + sanitize(v.hora) + '</span>' +
@@ -721,7 +828,7 @@ var pagosFiltro = '';
 function pagosTabsHtml() {
   return '<div class="view-tabs">' +
     '<button class="vt' + (pagosTab === 'pagos'  ? ' active' : '') + '" onclick="window.__pagosTab(\'pagos\')">💳 Pagos</button>' +
-    '<button class="vt' + (pagosTab === 'planes' ? ' active' : '') + '" onclick="window.__pagosTab(\'planes\')">⭐ Planes y suscripción</button>' +
+    '<button class="vt' + (pagosTab === 'planes' ? ' active' : '') + '" onclick="window.__pagosTab(\'planes\')">⭐ ' + (State.session && State.session.rol === 'inquilino' ? 'Inquilino VIP' : 'Planes y suscripción') + '</button>' +
   '</div>';
 }
 
@@ -855,6 +962,9 @@ async function planesHtml() {
   var user   = State.session;
   var actual = (mi && mi.plan) || user.plan || 'free';
 
+  // El inquilino solo ve su Pass VIP (los Planos 2D/3D y los planes de publicación son del arrendador)
+  if (user.rol === 'inquilino') return vipHtml(planes.find(function(p) { return p.categoria === 'inquilino'; }), actual, mi);
+
   var suscripciones = planes.filter(function(p) { return (p.categoria || 'suscripcion') === 'suscripcion'; });
   var planos        = planes.filter(function(p) { return p.categoria === 'plano'; });
 
@@ -896,6 +1006,40 @@ async function planesHtml() {
     planosHtml(planos);
 }
 
+// ── Pass Inquilino VIP ─────────────────────────────────────────
+var VIP_ICONOS = ['🚀', '✔️', '🔔', '📅'];
+
+function vipHtml(vip, actual, mi) {
+  if (!vip) return '<div style="padding:30px 28px;color:var(--t3)">El Pass VIP no está disponible. Ejecuta <code>npm run db:seed</code> en el backend.</div>';
+  var activo = actual === vip.id;
+  var alerta = getAlertaVip();
+  return '<div class="vip-sec">' +
+    '<div class="vip-hero">' +
+      '<div><span class="vip-tag">⭐ Exclusivo para inquilinos</span>' +
+        '<h2>' + sanitize(vip.nombre) + '</h2>' +
+        '<p>' + sanitize(vip.descripcion || '') + '</p></div>' +
+      '<div class="vip-price">' + formatCOP(vip.precio) + '<small> COP/mes</small>' +
+        (activo
+          ? '<span class="vip-on">✓ Tu Pass está activo' + (mi && mi.vence ? ' · vence el ' + sanitize(formatFecha(mi.vence)) : '') + '</span>'
+          : '<button class="btn-a btn-xl" onclick="window.__openPlan(\'' + sanitize(vip.id) + '\')">Activar Pass VIP</button>') +
+      '</div>' +
+    '</div>' +
+    '<div class="vip-grid">' + (vip.features || []).map(function(f, i) {
+      return '<div class="vip-feat"><span class="vip-feat-ico" aria-hidden="true">' + (VIP_ICONOS[i] || '⭐') + '</span><span>' + sanitize(f) + '</span></div>';
+    }).join('') + '</div>' +
+    (activo
+      ? '<div class="pay-card vip-estado">' +
+          '<div><div class="kpi-label">Alertas de nuevos inmuebles</div>' +
+            '<div style="font-size:14px;color:var(--t1);margin-top:4px">' + (alerta ? '🔔 ' + sanitize(describirFiltros(alerta.filtros)) : 'Aún no tienes una alerta. Ve a <strong>Explorar</strong>, aplica tus filtros y toca <strong>🔔 Crear alerta</strong>.') + '</div></div>' +
+          '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+            '<button class="btn-g" onclick="window.__showView(\'catalogo\')">Ir a Explorar</button>' +
+            '<button class="btn-g" onclick="window.__cancelPlan()">Volver a Básico</button>' +
+          '</div>' +
+        '</div>'
+      : '<p style="padding:0 28px 32px;font-size:13px;color:var(--t2)">Plan actual: <strong>Básico (gratis)</strong> — explorar, guardar favoritos, agendar visitas y reportar pagos.</p>') +
+  '</div>';
+}
+
 function featuresHtml(features) {
   if (!features || !features.length) return '';
   return '<ul class="plan-feats">' + features.map(function(f) { return '<li>' + sanitize(f) + '</li>'; }).join('') + '</ul>';
@@ -908,7 +1052,7 @@ function planosHtml(planos) {
   var icons = { plano_2d: '📐', plano_3d: '🧊' };
   return '<div class="planos-sec">' +
     '<div class="planos-head">' +
-      '<div><h2>Planos 2D y 3D</h2><p>Muestra la distribución de tu inmueble con planos profesionales. Disponible para arrendadores e inquilinos.</p></div>' +
+      '<div><h2>Planos 2D y 3D</h2><p>Muestra la distribución de tu inmueble con planos profesionales.</p></div>' +
       '<span class="badge b-i">Pago único</span>' +
     '</div>' +
     '<div class="planos-grid">' + planos.map(function(p) {
@@ -954,9 +1098,10 @@ async function renderPlanesTab(el, titulo) {
 // ── Suscripción ────────────────────────────────────────────────
 async function renderSuscripcion(el) {
   var body = await planesHtml();
+  var inq  = State.session.rol === 'inquilino';
   el.innerHTML =
-    '<div class="topbar"><div><h1 class="pg-title">Suscripción</h1>' +
-    '<p class="pg-sub">Elige el plan que mejor se adapte a ti</p></div></div>' + body;
+    '<div class="topbar"><div><h1 class="pg-title">' + (inq ? 'Inquilino VIP' : 'Suscripción') + '</h1>' +
+    '<p class="pg-sub">' + (inq ? 'Asegura tu próximo hogar antes que los demás' : 'Elige el plan que mejor se adapte a ti') + '</p></div></div>' + body;
 }
 // ── Configuración ──────────────────────────────────────────────
 async function renderConfiguracion(el) {
@@ -980,14 +1125,70 @@ async function renderConfiguracion(el) {
           '<div class="mf"><label>Nombre</label><input id="cfg-n" value="' + sanitize(user.nombre || '') + '"/></div>' +
           '<div class="mf"><label>Apellido</label><input id="cfg-a" value="' + sanitize(user.apellido || '') + '"/></div>' +
           '<div class="mf"><label>Email</label><input id="cfg-e" type="email" value="' + sanitize(user.email) + '"/></div>' +
-          '<div class="mf"><label>Teléfono</label><input id="cfg-t" placeholder="+57 300 000 0000" value="' + sanitize(user.telefono || '') + '"/></div>' +
+          '<div class="mf"><label for="cfg-t">' + (user.rol === 'arrendador' ? 'WhatsApp de contacto' : 'Teléfono') + '</label><input id="cfg-t" type="tel" placeholder="+57 300 000 0000" value="' + sanitize(user.telefono || '') + '"' + (user.rol === 'arrendador' ? ' aria-describedby="cfg-t-hint"' : '') + '/>' +
+            (user.rol === 'arrendador' ? '<small class="form-hint" id="cfg-t-hint">Fuera de Colombia incluye el indicativo del país (+52, +54, +51…).</small>' : '') + '</div>' +
         '</div>' +
+        (user.rol === 'arrendador' ? waConfigHtml(user) : '') +
         '<div style="display:flex;gap:10px">' +
           '<button class="btn-a" onclick="window.__saveConfig()">Guardar cambios</button>' +
-          '<button class="btn-g">Cancelar</button>' +
+          '<button class="btn-g" onclick="window.__showView(\'configuracion\')">Cancelar</button>' +
         '</div>' +
       '</div>' +
     '</div>';
+  if (user.rol === 'arrendador') bindWaConfig();
+}
+
+// ── WhatsApp del arrendador: plantilla y prueba del enlace ─────
+// Propiedad de ejemplo para la vista previa: la primera publicada o una ficticia
+function waPropEjemplo() {
+  var user = State.session;
+  var p = (State.myProps && State.myProps[0]) || { titulo: 'Apartamento en Chapinero', ciudad: 'bogotá', precio: 1800000, listing: 'rent' };
+  return Object.assign({}, p, { contacto: { nombre: [user.nombre, user.apellido].filter(Boolean).join(' '), telefono: getEl('cfg-t') ? getEl('cfg-t').value : user.telefono } });
+}
+
+function waConfigHtml(user) {
+  return '<div class="wa-cfg">' +
+    '<h3>' + WA_ICON + ' Así te contactarán por WhatsApp</h3>' +
+    '<p class="form-hint">Este es el mensaje que llega listo cuando un interesado toca <strong>WhatsApp</strong> en una de tus propiedades. ' +
+      'Puedes usar ' + WA_VARIABLES.map(function(v) { return '<code>' + v + '</code>'; }).join(' ') + '. Déjalo vacío para usar el predeterminado.</p>' +
+    '<div class="mf"><label for="cfg-wa">Plantilla del mensaje de bienvenida</label>' +
+      '<textarea id="cfg-wa" rows="3" maxlength="500" placeholder="' + sanitize(WA_PLANTILLA_DEFAULT) + '">' + sanitize(user.waMensaje || '') + '</textarea></div>' +
+    '<div class="wa-preview" aria-live="polite"><span class="wa-preview-lbl">Vista previa</span><div class="wa-bubble" id="cfg-wa-prev"></div></div>' +
+    '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">' +
+      '<a class="btn-wa" id="cfg-wa-test" href="#" target="_blank" rel="noopener noreferrer">' + WA_ICON + ' Probar mi enlace de WhatsApp</a>' +
+      '<button type="button" class="btn-g" id="cfg-wa-copy">📋 Copiar enlace</button>' +
+      '<span class="form-hint" id="cfg-wa-msg"></span>' +
+    '</div>' +
+    '<p class="form-hint" style="margin-top:8px">💡 Para responder automáticamente, activa el <em>mensaje de bienvenida</em> en WhatsApp Business (Herramientas para la empresa → Mensaje de bienvenida).</p>' +
+  '</div>';
+}
+
+function bindWaConfig() {
+  var tpl = getEl('cfg-wa'), tel = getEl('cfg-t'), prev = getEl('cfg-wa-prev'), test = getEl('cfg-wa-test'), msg = getEl('cfg-wa-msg');
+  if (!tpl || !tel) return;
+  var link = '';
+  var update = function() {
+    var texto = waMensajePropiedad(waPropEjemplo(), tpl.value.trim());
+    link = waLink(tel.value, texto);
+    prev.textContent = texto;
+    test.href = link || '#';
+    test.classList.toggle('is-disabled', !link);
+    msg.textContent = link ? 'Se abrirá tu propio chat con el mensaje de ejemplo.' : (tel.value.trim() ? '⚠️ Número no válido para WhatsApp' : '⚠️ Escribe tu número de WhatsApp');
+  };
+  tpl.addEventListener('input', update);
+  tel.addEventListener('input', update);
+  test.addEventListener('click', function(e) {
+    if (!link) { e.preventDefault(); showToast(waNumber(tel.value) ? 'Revisa la plantilla' : 'Escribe un número de WhatsApp válido', 'warning'); }
+  });
+  getEl('cfg-wa-copy').addEventListener('click', function() {
+    if (!link) { showToast('Escribe un número de WhatsApp válido', 'warning'); return; }
+    (navigator.clipboard ? navigator.clipboard.writeText(link) : Promise.reject())
+      .then(function() { showToast('Enlace copiado ✓', 'success'); })
+      .catch(function() { window.prompt('Copia tu enlace de WhatsApp:', link); });
+  });
+  update();
+  // Con una propiedad real la vista previa es más fiel
+  if (!State.myProps || !State.myProps.length) getMyProps().then(update).catch(function() {});
 }
 
 export async function saveConfig() {
@@ -995,11 +1196,15 @@ export async function saveConfig() {
     nombre:   getEl('cfg-n') ? getEl('cfg-n').value.trim() : undefined,
     apellido: getEl('cfg-a') ? getEl('cfg-a').value.trim() : undefined,
     telefono: getEl('cfg-t') ? getEl('cfg-t').value.trim() : undefined,
+    waMensaje: getEl('cfg-wa') ? getEl('cfg-wa').value.trim() : undefined,
   };
   if (!data.nombre) { showToast('El nombre es obligatorio','warning'); return; }
+  if (State.session.rol === 'arrendador' && data.telefono && !waNumber(data.telefono)) {
+    showToast('Ese número no sirve para WhatsApp: incluye el indicativo del país (ej. +52 55 1234 5678)', 'warning', 4500); return;
+  }
   const r = await UsuariosApi.updateMe(data);
   if (!r || !r.ok) { showToast((r && r.error && r.error.message) || 'No se pudo guardar el perfil','error'); return; }
-  Object.assign(State.session, { nombre: r.data.nombre, apellido: r.data.apellido, telefono: r.data.telefono });
+  Object.assign(State.session, { nombre: r.data.nombre, apellido: r.data.apellido, telefono: r.data.telefono, waMensaje: r.data.waMensaje });
   updateSidebarProfile();
   showToast('Perfil guardado ✓','success');
 }
@@ -1036,11 +1241,54 @@ async function renderMisVisitas(el) {
   }).join('');
 
   el.innerHTML =
-    '<div class="topbar"><div><h1 class="pg-title">Mis Visitas</h1><p class="pg-sub">' + visitas.length + ' agendadas · solicítalas desde el detalle de una propiedad</p></div></div>' +
+    '<div class="topbar"><div><h1 class="pg-title">Mis Visitas</h1><p class="pg-sub">' + visitas.length + ' agendadas · agéndalas con 📅 desde cualquier tarjeta de Explorar</p></div></div>' +
     '<div class="tbl-wrap">' +
       '<div class="t-head" style="grid-template-columns:' + cols + '">' +
         '<span>Propiedad</span><span>Fecha</span><span>Hora</span><span>Estado</span>' +
       '</div>' +
       (rows || '<div style="padding:30px;text-align:center;color:var(--t3)">Sin visitas agendadas</div>') +
     '</div>';
+}
+
+// ── Mi Hogar (inquilino): inmuebles activos ────────────────────
+var HOGAR_ESTADO = {
+  reservada: { ico: '⏳', lbl: 'Esperando confirmación del arrendador', cls: 'b-w' },
+  arrendada: { ico: '🏠', lbl: 'Arrendada · Mi hogar actual',          cls: 'b-ok' },
+  vendida:   { ico: '🔑', lbl: 'Comprada · Es tuya',                    cls: 'b-ok' },
+};
+
+async function renderMiHogar(el) {
+  const props   = await getMiHogar();
+  const activos = props.filter(function(p) { return p.estado !== 'reservada'; });
+  const pend    = props.filter(function(p) { return p.estado === 'reservada'; });
+
+  function card(p) {
+    var est   = HOGAR_ESTADO[p.estado] || { ico: '🏠', lbl: p.estado, cls: 'b-i' };
+    var foto  = (p.fotos && p.fotos.length) ? mediaUrl(p.fotos[0]) : '';
+    var wa    = waPropiedad(p);
+    return '<article class="hogar-card" onclick="window.__openDetail(\'' + sanitize(p.id) + '\')">' +
+      '<div class="hogar-img">' + (foto ? '<img src="' + sanitize(foto) + '" alt="' + sanitize(p.titulo) + '" loading="lazy">' : '<div class="pc-noimg">🏠</div>') + '</div>' +
+      '<div class="hogar-bd">' +
+        '<span class="badge ' + est.cls + '">' + est.ico + ' ' + sanitize(est.lbl) + '</span>' +
+        '<h3>' + sanitize(p.titulo) + '</h3>' +
+        '<div class="pc-lc">📍 ' + sanitize(cityLabel(p.ciudad)) + (p.barrio ? ' · ' + sanitize(p.barrio) : '') + '</div>' +
+        '<div class="hogar-meta"><strong>' + formatCOP(p.precio) + '</strong> ' + (p.listing === 'sale' || p.cierreTipo === 'compra' ? 'COP' : 'COP/mes') +
+          (p.cerradaAt ? ' · desde el ' + sanitize(formatFecha(p.cerradaAt)) : '') + '</div>' +
+        '<div class="hogar-meta">👤 ' + sanitize((p.contacto && p.contacto.nombre) || 'Arrendador') + '</div>' +
+        '<div class="hogar-acts">' +
+          '<a class="btn-wa" href="' + sanitize(wa.href) + '" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">' + WA_ICON + ' WhatsApp</a>' +
+          (p.estado === 'arrendada' ? '<button class="btn-g" onclick="event.stopPropagation();window.__showView(\'mis-pagos\')">💳 Mis pagos</button>' : '') +
+        '</div>' +
+      '</div>' +
+    '</article>';
+  }
+
+  el.innerHTML =
+    '<div class="topbar"><div><h1 class="pg-title">Mi Hogar</h1><p class="pg-sub">Mis inmuebles activos: lo que arriendas o compraste</p></div></div>' +
+    (props.length
+      ? (activos.length ? '<h2 class="hogar-sec">🏠 Mi hogar actual</h2><div class="hogar-grid">' + activos.map(card).join('') + '</div>' : '') +
+        (pend.length ? '<h2 class="hogar-sec">⏳ Cierres pendientes</h2><div class="hogar-grid">' + pend.map(card).join('') + '</div>' : '')
+      : '<div class="prop-grid-d">' + emptyState('🏡', 'Aún no tienes un hogar activo',
+          'Cuando encuentres el inmueble ideal, abre su ficha y toca <strong>🤝 Cerrar arriendo</strong> o <strong>🏠 Comprar</strong>.',
+          '<button class="btn-a" style="margin-top:8px" onclick="window.__showView(\'catalogo\')">Explorar propiedades</button>') + '</div>');
 }

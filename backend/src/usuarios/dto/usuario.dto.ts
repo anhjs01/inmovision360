@@ -5,6 +5,8 @@ export class UpdateMeDto {
   @IsOptional() @IsString() @MinLength(1) @MaxLength(60)   nombre?: string;
   @IsOptional() @IsString() @MaxLength(60)                 apellido?: string;
   @IsOptional() @Matches(/^[+\d\s()-]{0,20}$/, { message: 'Teléfono inválido' }) telefono?: string;
+  // Plantilla del mensaje con el que los clientes escriben por WhatsApp (vacía = la predeterminada)
+  @IsOptional() @IsString() @MaxLength(500)                waMensaje?: string;
 }
 
 export class ChangePasswordDto {

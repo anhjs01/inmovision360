@@ -8,10 +8,11 @@ import { State, addProp, updateProp, deleteProp, getPropById,
          deleteVisita, solicitarVisita, addLead, updateLead, deleteLead,
          addPago, updatePago, deletePago, markPagoAsPaid,
          reportarPago, subirComprobante, quitarComprobante, getPropsReportables,
-         getPlanes, suscribirse, cancelarPlan } from './store.js';
+         getPlanes, suscribirse, cancelarPlan, solicitarCierre, resolverCierre } from './store.js';
 import { showToast, showErrorAlert, refreshView, updateBadges, updateSidebarProfile, addPlanoSolicitado } from './ui.js';
 import { sanitize, formatCOP, formatNum, formatFecha, parseCOP, capitalize, getEl, safeUrl, waLink, WHATSAPP_SOPORTE,
-         CITY_LABELS, AMENITY_LABELS, LISTING_LABELS, desgloseMensual } from '../utils.js';
+         AMENITY_LABELS, LISTING_LABELS, desgloseMensual, waPropiedad, videoEmbedUrl, youtubeId,
+         cityKey, cityLabel, citiesDatalistHtml, esVip, ESTADO_PROP, WA_ICON } from '../utils.js';
 import { MensajesApi, PropiedadesApi, PagosApi, mediaUrl } from '../api.js';
 
 const MAX_FOTOS      = 20;
@@ -123,16 +124,24 @@ function bindMoneyInput(input) {
 }
 
 // ── Soft Gate ─────────────────────────────────────────────────
-export async function openSoftGate(propId) {
+// accion: qué intentó hacer el visitante anónimo ('agendar' | 'whatsapp' | 'favorito'); cambia el texto
+const GATE_ACCION = {
+  agendar:  { ico: '📅', titulo: 'Agenda tu cita en segundos', sub: 'Crea tu cuenta gratuita para elegir día y hora de visita' },
+  whatsapp: { ico: '💬', titulo: 'Habla con el arrendador',     sub: 'Crea tu cuenta gratuita para escribirle directo por WhatsApp' },
+  favorito: { ico: '❤️', titulo: 'Guarda tus favoritas',        sub: 'Crea tu cuenta gratuita para guardar esta propiedad' },
+};
+
+export async function openSoftGate(propId, accion = null) {
   const prop = await getPropById(propId);
   if (!prop) return;
+  const a  = GATE_ACCION[accion];
   const ov = createOverlay();
   ov.className = 'gate-bg';
   ov.innerHTML = `
     <div class="gate-box">
-      <span class="gate-ico">🏡</span>
-      <div class="gate-title">¡Casi listo!</div>
-      <div class="gate-sub">Crea tu cuenta gratuita para ver los detalles completos,
+      <span class="gate-ico">${a ? a.ico : '🏡'}</span>
+      <div class="gate-title">${a ? a.titulo : '¡Casi listo!'}</div>
+      <div class="gate-sub">${a ? a.sub + ` en <strong>${sanitize(prop.titulo)}</strong>, además de ver` : 'Crea tu cuenta gratuita para ver'} los detalles completos,
         galería de ${(prop.fotos??[]).length} fotos${prop.tourVirtual?', tour virtual 360°':''} y contactar al arrendador.</div>
       <div class="gate-perks">
         <div class="gate-perk"><div class="gp-ico">📸</div>${(prop.fotos??[]).length} fotos de alta calidad</div>
@@ -157,9 +166,12 @@ export async function openDetail(propId) {
 
   const photos    = (prop.fotos ?? []).map(mediaUrl);
   const tourUrl   = safeUrl(prop.tourUrl);
-  const videoUrl  = safeUrl(prop.video);
+  const videoUrl  = videoEmbedUrl(prop.video);   // watch?v= / youtu.be → /embed/ID
   const esPropia  = State.session?.id === prop.ownerId;
   const esInq     = State.session?.rol === 'inquilino';
+  const estado    = prop.estado || 'disponible';
+  const disponible = estado === 'disponible';
+  const wa        = waPropiedad(prop);
   let   activeTab = 'fotos';
   let   activePhoto = 0;
 
@@ -182,9 +194,10 @@ export async function openDetail(propId) {
           ${prop.destacado?'<span class="badge b-w">⭐ Destacado</span>':''}
           ${prop.tourVirtual?`<span class="badge b-ok">🥽 ${sanitize(prop.tourTipo??'Tour')}</span>`:''}
           ${prop.mapa2d?'<span class="badge b-ok">🗺 Mapa 2D</span>':''}
+          ${!disponible?`<span class="badge ${ESTADO_PROP[estado]?.cls ?? 'b-w'}">${prop.esMiHogar ? '🏠 Mi Hogar · ' : ''}${sanitize(ESTADO_PROP[estado]?.lbl ?? estado)}</span>`:''}
         </div>
         <h2 style="font-size:22px;font-weight:800;color:var(--t1);margin-bottom:5px">${sanitize(prop.titulo)}</h2>
-        <p style="font-size:13px;color:var(--t2)">📍 ${sanitize(CITY_LABELS[prop.ciudad]??prop.ciudad)}${prop.barrio?` — ${sanitize(prop.barrio)}`:''}</p>
+        <p style="font-size:13px;color:var(--t2)">📍 ${sanitize(cityLabel(prop.ciudad))}${prop.barrio?` — ${sanitize(prop.barrio)}`:''}</p>
       </div>
       <div class="gal-tabs">
         ${tabs.map(t=>`<button class="gt${t.k===activeTab?' active':''}" data-tab="${t.k}">${t.label}</button>`).join('')}
@@ -223,7 +236,9 @@ export async function openDetail(propId) {
       ${videoUrl?`
         <div class="gt-pane${activeTab==='video'?' active':''}" id="pane-video" style="padding:16px 20px">
           <div style="width:100%;aspect-ratio:16/9;border-radius:14px;overflow:hidden;background:#000">
-            <iframe src="${sanitize(videoUrl)}" style="width:100%;height:100%;border:none" allowfullscreen></iframe>
+            <iframe src="${sanitize(videoUrl)}" title="Video — ${sanitize(prop.titulo)}" style="width:100%;height:100%;border:none"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
           </div>
         </div>`:''}
 
@@ -246,11 +261,14 @@ export async function openDetail(propId) {
           <div style="font-size:28px;font-weight:800;color:var(--pr)">${formatCOP(prop.precio)}</div>
           <div style="font-size:12px;color:var(--t3);margin-top:-8px">${prop.listing === 'sale' ? 'COP · Venta' : 'COP / mes'}</div>
           ${desgloseHtml(prop)}
-          ${esInq?`<button class="btn-a btn-xl" onclick="window.__solicitarVisita('${prop.id}')" aria-describedby="visita-hint">📅 Agendar visita</button>
+          ${esInq && (disponible || prop.esMiHogar)?`<button class="btn-a btn-xl" onclick="window.__solicitarVisita('${prop.id}')" aria-describedby="visita-hint">📅 Agendar visita</button>
             <p class="btn-hint" id="visita-hint">Elige día y hora en 2 toques; el arrendador te confirma.</p>`:''}
+          ${esInq ? cierreHtml(prop) : ''}
           ${!esPropia?`<button class="btn-p btn-xl" style="background:#0f172a" onclick="window.__sendMsg('${prop.id}','${prop.ownerId}')">💬 Contactar arrendador</button>`:''}
-          ${!esPropia ? `<a class="btn-wa btn-xl" href="${sanitize(waPropiedad(prop))}" target="_blank" rel="noopener noreferrer" aria-describedby="wa-hint">${WA_ICON} Escribir por WhatsApp</a>
-            <p class="btn-hint" id="wa-hint">Se abre WhatsApp con un mensaje listo sobre esta propiedad. Solo presiona <strong>Enviar</strong>.</p>` : ''}
+          ${!esPropia ? `<a class="btn-wa btn-xl" href="${sanitize(wa.href)}" target="_blank" rel="noopener noreferrer" aria-describedby="wa-hint">${WA_ICON} Escribir por WhatsApp</a>
+            <p class="btn-hint" id="wa-hint">${wa.directo
+              ? 'Se abre el chat del arrendador con un mensaje listo sobre esta propiedad. Solo presiona <strong>Enviar</strong>.'
+              : 'El arrendador aún no registró su WhatsApp: te atiende nuestro equipo con un mensaje listo sobre esta propiedad.'}</p>` : ''}
           <button id="det-fav-btn" class="btn-xl" style="padding:10px;border-radius:10px;border:1.5px solid #fed7aa;background:#fff8ed;color:#b45309;font-size:14px;font-weight:600;cursor:pointer;font-family:var(--f)"
             onclick="window.__toggleFavDetail('${prop.id}',this)">${isFav(prop.id)?'❤️ En favoritos':'🤍 Guardar'}</button>
           <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--bo);font-size:12px;color:var(--t3);line-height:2">
@@ -315,15 +333,94 @@ function desgloseHtml(prop) {
 }
 
 // ── WhatsApp ──────────────────────────────────────────────────
-export const WA_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>';
+// El ícono vive en utils.js (lo usan también las tarjetas); se re-exporta para main.js
+export { WA_ICON };
 
-// Chat con el arrendador (o con soporte si no registró teléfono), con el título de la propiedad
-function waPropiedad(prop) {
-  const ciudad  = CITY_LABELS[prop.ciudad] ?? prop.ciudad;
-  const nombre  = (prop.contacto?.nombre || '').split(' ')[0];
-  const texto   = `Hola${nombre ? ' ' + nombre : ''} 👋, vi en INMOVISIÓN 360 la propiedad "${prop.titulo}" ` +
-                  `(${ciudad}, ${formatCOP(prop.precio)} ${prop.listing === 'sale' ? 'COP' : 'COP/mes'}) y me gustaría recibir más información.`;
-  return waLink(prop.contacto?.telefono, texto) || waLink(WHATSAPP_SOPORTE, texto);
+// ── Cierre de arriendo / compra (inquilino) ───────────────────
+// Qué puede pedir el inquilino según la modalidad publicada
+const CIERRES_POR_LISTING = { rent: ['arriendo'], vacation: ['arriendo'], sale: ['compra'], rent_sale: ['arriendo', 'compra'] };
+const CIERRE_LBL = { arriendo: '🤝 Cerrar arriendo', compra: '🏠 Comprar este inmueble' };
+
+function cierreHtml(prop) {
+  const estado = prop.estado || 'disponible';
+  if (prop.esMiHogar) {
+    return estado === 'reservada'
+      ? '<p class="cierre-nota">⏳ Pediste cerrar este trato. El arrendador debe confirmarlo; lo verás en <strong>Mi Hogar</strong>.</p>'
+      : `<p class="cierre-nota cierre-ok">🏠 Este es tu hogar actual (${sanitize((ESTADO_PROP[estado]?.lbl ?? estado).toLowerCase())}).</p>`;
+  }
+  if (estado !== 'disponible') return '<p class="cierre-nota">Esta propiedad ya no está disponible.</p>';
+  return (CIERRES_POR_LISTING[prop.listing] ?? []).map(t =>
+    `<button class="btn-g btn-xl cierre-btn" onclick="window.__cerrarTrato('${prop.id}','${t}')">${CIERRE_LBL[t]}</button>`).join('');
+}
+
+export async function openCierre(propId, tipo) {
+  const prop = await getPropById(propId);
+  if (!prop) return;
+  const compra = tipo === 'compra';
+  const ok = await confirmDialog(
+    compra ? '¿Comprar este inmueble?' : '¿Cerrar el arriendo?',
+    `Le pediremos a <strong>${sanitize(prop.contacto?.nombre || 'el arrendador')}</strong> que confirme ` +
+    `${compra ? 'la compra' : 'el arriendo'} de <strong>${sanitize(prop.titulo)}</strong>. ` +
+    'Mientras tanto la propiedad sale del catálogo y la verás en <strong>Mi Hogar</strong>.',
+    compra ? 'Sí, comprar' : 'Sí, cerrar arriendo');
+  if (!ok) return;
+  try {
+    await solicitarCierre(propId, tipo);
+    document.querySelectorAll('.modal-bg').forEach(m => m.remove());
+    showToast('Solicitud enviada ✓ — el arrendador debe confirmarla', 'success', 4500);
+    await refreshView();
+  } catch (e) { showToast(e.message || 'No se pudo enviar la solicitud', 'error'); }
+}
+
+// ── Cierre (arrendador): confirmar, rechazar o volver a publicar ──
+const RESOLVER_TXT = {
+  confirmar: ['¿Confirmar el cierre?', 'La propiedad quedará como <strong>{estado}</strong> y aparecerá en el hogar del inquilino.', 'Confirmar'],
+  rechazar:  ['¿Rechazar la solicitud?', 'La propiedad vuelve a estar disponible en el catálogo y se avisará al inquilino.', 'Rechazar'],
+  liberar:   ['¿Volver a publicar?', 'La propiedad vuelve al catálogo como disponible y se desvincula del inquilino actual.', 'Volver a publicar'],
+};
+
+export async function openResolverCierre(propId, accion) {
+  const prop = (State.myProps || []).find(p => p.id === propId) || await getPropById(propId);
+  if (!prop || !RESOLVER_TXT[accion]) return;
+  const [titulo, msg, okLbl] = RESOLVER_TXT[accion];
+  const estadoFinal = prop.cierreTipo === 'compra' ? 'vendida' : 'arrendada';
+  if (!(await confirmDialog(titulo, msg.replace('{estado}', estadoFinal), okLbl))) return;
+  try {
+    await resolverCierre(propId, accion);
+    showToast(accion === 'confirmar' ? `Propiedad ${estadoFinal} ✓` : accion === 'rechazar' ? 'Solicitud rechazada' : 'Propiedad publicada de nuevo ✓',
+      accion === 'rechazar' ? 'info' : 'success');
+    await refreshView();
+  } catch (e) { showToast(e.message || 'No se pudo actualizar la propiedad', 'error'); }
+}
+
+// ── Video de la propiedad (vista rápida desde la tarjeta) ─────
+export async function openVideoViewer(propId) {
+  const prop = await getPropById(propId);
+  const url  = videoEmbedUrl(prop?.video);
+  if (!prop || !url) { showToast('Esta propiedad no tiene video', 'warning'); return; }
+  const ov = createOverlay();
+  ov.innerHTML = `
+    <div class="modal-box" style="max-width:960px;width:96vw">
+      <div class="mh">
+        <div><div class="mh-title">🎬 Video de la propiedad</div>
+             <div class="mh-sub">${sanitize(prop.titulo)} · ${sanitize(cityLabel(prop.ciudad))}</div></div>
+        <button class="btn-mx" data-x aria-label="Cerrar">✕</button>
+      </div>
+      <div style="padding:16px 20px 20px">
+        <div style="width:100%;aspect-ratio:16/9;border-radius:14px;overflow:hidden;background:#000">
+          <iframe src="${sanitize(url)}" title="Video — ${sanitize(prop.titulo)}" style="width:100%;height:100%;border:none"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+        </div>
+      </div>
+      <div class="mf-foot">
+        <button class="btn-g" data-x>Cerrar</button>
+        ${State.session ? '<button class="btn-a" id="vv-det">Ver detalles de la propiedad</button>' : ''}
+      </div>
+    </div>`;
+  ov.querySelectorAll('[data-x]').forEach(b => b.onclick = () => ov.remove());
+  const det = ov.querySelector('#vv-det');
+  if (det) det.onclick = () => { ov.remove(); openDetail(propId); };
 }
 
 window.__toggleFavDetail = async (propId, btn) => {
@@ -460,7 +557,9 @@ export async function openPlanCheckout(planId) {
       <div style="background:#f9fafb;border-radius:16px;padding:20px;margin-bottom:20px;border:1px solid var(--bo)">
         <div style="font-size:20px;font-weight:700;color:var(--t1)">Plan ${sanitize(plan.nombre)}</div>
         <div style="font-size:34px;font-weight:800;color:var(--pr);margin-top:4px">${gratis ? 'Gratis' : formatCOP(plan.precio)}${gratis ? '' : '<span style="font-size:14px;font-weight:400;color:var(--t3)"> COP/mes</span>'}</div>
-        <div style="font-size:12.5px;color:var(--t2);margin-top:6px">${plan.propsMax ? `Hasta ${formatNum(plan.propsMax)} propiedades` : 'Propiedades ilimitadas'}</div>
+        <div style="font-size:12.5px;color:var(--t2);margin-top:6px">${plan.categoria === 'inquilino'
+          ? 'Prioridad, perfil verificado, alertas y soporte preferencial'
+          : plan.propsMax ? `Hasta ${formatNum(plan.propsMax)} propiedades` : 'Propiedades ilimitadas'}</div>
       </div>
       ${gratis ? '' : `
       <div style="font-size:11.5px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.07em;margin-bottom:12px;text-align:left">Método de pago</div>
@@ -533,7 +632,9 @@ export async function openPlanoCheckout(planId) {
 }
 
 export async function confirmCancelPlan() {
-  const ok = await confirmDialog('¿Cancelar suscripción?', 'Tu cuenta volverá al plan <strong>Free</strong> y sus límites.', 'Cancelar plan');
+  const ok = State.session?.rol === 'inquilino'
+    ? await confirmDialog('¿Cancelar el Pass VIP?', 'Perderás la postulación prioritaria, la insignia de perfil verificado y las alertas de nuevos inmuebles.', 'Cancelar Pass')
+    : await confirmDialog('¿Cancelar suscripción?', 'Tu cuenta volverá al plan <strong>Free</strong> y sus límites.', 'Cancelar plan');
   if (!ok) return;
   try {
     await cancelarPlan();
@@ -577,7 +678,10 @@ export async function openPropertyForm(propId = null) {
       <!-- Paso 1 -->
       <div class="fstep-pane active" id="fsp-0"><div class="mgrid">
         <div class="mf span2"><label>Título *</label><input id="ft" value="${sanitize(prop?.titulo??'')}" placeholder="Ej: Penthouse Rosales 360°" maxlength="80"/></div>
-        <div class="mf"><label>Ciudad *</label><select id="fc"><option value="">Selecciona…</option>${Object.entries(CITY_LABELS).map(([v,l])=>`<option value="${v}"${prop?.ciudad===v?' selected':''}>${l}</option>`).join('')}</select></div>
+        <div class="mf"><label for="fc">Ciudad o municipio *</label>
+          <input id="fc" list="fc-ciudades" autocomplete="off" maxlength="60" value="${sanitize(cityLabel(prop?.ciudad ?? ''))}" placeholder="Escribe o elige: Bogotá, Lima, Ciudad de México…"/>
+          ${citiesDatalistHtml('fc-ciudades')}
+        </div>
         <div class="mf"><label>Barrio</label><input id="fb" value="${sanitize(prop?.barrio??'')}" placeholder="Ej: Rosales"/></div>
         <div class="mf"><label>Tipo *</label><select id="ftp"><option value="">Selecciona…</option>${['apartamento','casa','villa','loft','estudio'].map(t=>`<option value="${t}"${prop?.tipo===t?' selected':''}>${capitalize(t)}</option>`).join('')}</select></div>
         <div class="mf"><label>Modalidad</label><select id="fls">
@@ -597,7 +701,10 @@ export async function openPropertyForm(propId = null) {
         <div class="mf"><label>Habitaciones</label><div class="stepper"><button type="button" class="step-b" id="hd">−</button><span class="step-v" id="hv">${habitaciones}</span><button type="button" class="step-b" id="hi">+</button></div></div>
         <div class="mf"><label>Baños</label><div class="stepper"><button type="button" class="step-b" id="bd">−</button><span class="step-v" id="bv">${banos}</span><button type="button" class="step-b" id="bi">+</button></div></div>
         <div class="mf span2"><label>Descripción</label><textarea id="fdesc" rows="3" maxlength="2000" style="resize:vertical" placeholder="Describe lo mejor del inmueble: vista, acabados, ubicación…">${sanitize(prop?.descripcion??'')}</textarea></div>
-        <div class="mf span2"><label>🎬 Video YouTube embed</label><input id="fvideo" type="url" value="${sanitize(prop?.video??'')}" placeholder="https://www.youtube.com/embed/…"/></div>
+        <div class="mf span2"><label for="fvideo">🎬 Video de YouTube</label>
+          <input id="fvideo" type="url" value="${sanitize(prop?.video??'')}" placeholder="Pega el enlace: youtube.com/watch?v=…, youtu.be/… o shorts/…" aria-describedby="fvideo-hint"/>
+          <small class="form-hint" id="fvideo-hint">Copia el enlace normal del video desde YouTube; lo convertimos automáticamente para mostrarlo en la ficha.</small>
+        </div>
       </div></div>
 
       <!-- Paso 3 — Fotos y Tour -->
@@ -664,7 +771,7 @@ export async function openPropertyForm(propId = null) {
   function stepError(s) {
     if (s === 0) {
       if (!getEl('ft').value.trim())  return 'El título es obligatorio';
-      if (!getEl('fc').value)         return 'Selecciona una ciudad';
+      if (ciudadError())              return ciudadError();
       if (!getEl('ftp').value)        return 'Selecciona un tipo';
       const pr = parseCOP(getEl('fp').value);
       if (!pr || pr < 100000)         return 'Precio mínimo $100.000';
@@ -672,7 +779,24 @@ export async function openPropertyForm(propId = null) {
     if (s === 1) {
       const m = parseInt(getEl('fm').value);
       if (!m || m < 10)               return 'Área mínima 10 m²';
+      if (videoError())               return videoError();
     }
+    return null;
+  }
+  // Cualquier ciudad o municipio: solo letras (con tildes), espacios y . , ' ( ) -
+  function ciudadError() {
+    const c = getEl('fc').value.trim();
+    if (!c)                                   return 'Escribe o elige una ciudad';
+    if (c.length < 2)                         return 'Ciudad demasiado corta';
+    if (!/^\p{L}[\p{L}\s.,'’()-]*$/u.test(c)) return 'La ciudad solo puede tener letras y espacios';
+    return null;
+  }
+  // Un enlace de YouTube que no se reconoce se mostraría roto en la ficha
+  function videoError() {
+    const v = getEl('fvideo').value.trim();
+    if (!v) return null;
+    if (!safeUrl(v)) return 'El video debe ser un enlace http(s)';
+    if (/youtu\.?be/i.test(v) && !youtubeId(v)) return 'No reconocemos ese enlace de YouTube; copia el enlace del video desde "Compartir"';
     return null;
   }
   getEl('fnx').onclick = () => {
@@ -743,13 +867,14 @@ export async function openPropertyForm(propId = null) {
   // Guardar
   getEl('fok').onclick = async () => {
     const titulo  = getEl('ft').value.trim();
-    const ciudad  = getEl('fc').value;
+    const ciudad  = cityKey(getEl('fc').value);   // "Bogota" → "bogotá"; ciudades nuevas tal cual, en minúsculas
     const tipo    = getEl('ftp').value;
     const precio  = parseCOP(getEl('fp').value);
     const metros  = parseInt(getEl('fm').value);
 
     if (!titulo)               return showToast('El título es obligatorio','error');
-    if (!ciudad)               return showToast('Selecciona una ciudad','warning');
+    if (ciudadError())         return showToast(ciudadError(),'warning');
+    if (videoError())          return showToast(videoError(),'warning');
     if (!tipo)                 return showToast('Selecciona un tipo','warning');
     if (!precio||precio<100000)return showToast('Precio mínimo $100.000','error');
     if (!metros||metros<10)    return showToast('Área mínima 10 m²','error');
@@ -772,7 +897,7 @@ export async function openPropertyForm(propId = null) {
       habitaciones, banos,
       fotos,
       descripcion: getEl('fdesc')?.value?.trim()||null,
-      video:       getEl('fvideo')?.value?.trim()||null,
+      video:       videoEmbedUrl(getEl('fvideo')?.value)||null,   // YouTube se guarda como /embed/ID
       tourUrl:     tourUrl||null,
       tourVirtual: !!tourUrl,
       comodidades: Array.from(ov.querySelectorAll('.am-cb:checked')).map(c=>c.value),
@@ -893,7 +1018,7 @@ export async function openSolicitarVisita(propId) {
 
   ov.innerHTML = `
     <div class="modal-box" style="max-width:520px">
-      <div class="mh"><div><div class="mh-title">📅 Agendar visita</div><div class="mh-sub">${sanitize(prop.titulo)}</div></div><button class="btn-mx" id="svx" aria-label="Cerrar">✕</button></div>
+      <div class="mh"><div><div class="mh-title">📅 Agendar visita</div><div class="mh-sub">${sanitize(prop.titulo)} · ${sanitize(cityLabel(prop.ciudad))}</div></div><button class="btn-mx" id="svx" aria-label="Cerrar">✕</button></div>
       <div style="padding:20px 28px;display:flex;flex-direction:column;gap:18px">
         ${helpSteps(['Toca el <strong>día</strong>', 'Toca la <strong>hora</strong>', 'El arrendador la confirma y la verás en <strong>Mis Visitas</strong>'])}
         <div>
@@ -909,6 +1034,10 @@ export async function openSolicitarVisita(propId) {
         </div>
         <div class="sv-resumen" id="sv-resumen" aria-live="polite"></div>
         <div class="mf"><label for="svn">Nota para el arrendador <span style="font-weight:400;color:var(--t3)">— opcional</span></label><input id="svn" placeholder="Ej: voy con mi pareja" maxlength="300"/></div>
+        ${esVip(State.session)
+          ? `<div class="vip-soporte">⭐ <span><strong>Inquilino VIP:</strong> tu solicitud aparece primero al arrendador.
+               ¿Necesitas ayuda para cuadrar la cita? <a href="${sanitize(waLink(WHATSAPP_SOPORTE, `Hola, soy Inquilino VIP y necesito ayuda para agendar una visita a "${prop.titulo}".`))}" target="_blank" rel="noopener noreferrer">Soporte preferencial por WhatsApp</a></span></div>`
+          : ''}
       </div>
       <div class="mf-foot">
         <button class="btn-g btn-xl" id="svc">Cancelar</button>

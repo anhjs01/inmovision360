@@ -4,7 +4,8 @@ import { ApiException }  from '../common/filters/http-exception.filter';
 import { ErrorCode }     from '../common/constants/error-codes';
 import { SolicitarVisitaDto, CreateVisitaManualDto, UpdateVisitaDto } from './dto/visita.dto';
 
-const INCLUDE = { inquilino: { select: { titulo: true } } };
+const INCLUDE  = { inquilino: { select: { titulo: true } } };
+const PLAN_VIP = 'inquilino_vip';
 
 @Injectable()
 export class VisitasService {
@@ -20,10 +21,18 @@ export class VisitasService {
         select: { id: true },
       });
       where.propId = { in: myProps.map(p => p.id) };
-    } else {
-      where.inquilinoId = userId;
+
+      // Postulación prioritaria: las solicitudes de inquilinos con Pass VIP van primero y con insignia
+      const visitas = await this.prisma.visitas.findMany({
+        where, orderBy: { createdAt: 'desc' },
+        include: { ...INCLUDE, usuario: { select: { plan: true } } },
+      });
+      return visitas
+        .map(({ usuario, ...v }) => ({ ...v, vip: usuario?.plan === PLAN_VIP }))
+        .sort((a, b) => Number(b.vip) - Number(a.vip));
     }
 
+    where.inquilinoId = userId;
     return this.prisma.visitas.findMany({ where, orderBy: { createdAt: 'desc' }, include: INCLUDE });
   }
 
@@ -39,6 +48,8 @@ export class VisitasService {
   async solicitar(user: any, dto: SolicitarVisitaDto) {
     const prop = await this.prisma.propiedad.findFirst({ where: { id: dto.propId, deletedAt: null } });
     if (!prop) throw new ApiException(ErrorCode.PROP_NOT_FOUND, 'Propiedad no encontrada', 'propId', HttpStatus.NOT_FOUND);
+    if (prop.estado !== 'disponible' && prop.inquilinoActualId !== user.id)
+      throw new ApiException(ErrorCode.PROP_NOT_AVAILABLE, 'Esta propiedad ya no está disponible', 'propId', HttpStatus.CONFLICT);
     // Fecha de Colombia (el servidor puede estar en UTC): no se agendan visitas en días pasados
     const hoyCO = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
     if (dto.fecha < hoyCO)

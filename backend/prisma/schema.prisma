@@ -12,7 +12,8 @@ datasource db {
 
 // ── Enums (SQLite no soporta enum nativo, se usan String) ────
 // Rol:         arrendador | inquilino | admin
-// PlanId:      free | starter | professional | enterprise
+// PlanId:      free | starter | professional | enterprise | plano_2d | plano_3d | inquilino_vip
+// PropEstado:  disponible | reservada | arrendada | vendida
 // ListingType: rent | sale | rent_sale | vacation
 // VisitaEstado:pendiente | confirmada | cancelada
 // PagoEstado:  pendiente | pagado | vencido
@@ -30,6 +31,7 @@ model Usuario {
   rol            String   @default("inquilino")
   plan           String   @default("free")
   telefono       String?
+  waMensaje      String?                      // plantilla del mensaje de WhatsApp con el que lo contactan (arrendador)
   verified       Boolean  @default(false)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -43,6 +45,7 @@ model Usuario {
   pagosOwner    Pago[]         @relation("OwnerPagos")
   pagosInq      Pago[]         @relation("InquilinoPagos")
   favoritos     Favorito[]
+  hogares       Propiedad[]    @relation("InquilinoActual")
   suscripcion   Suscripcion?
   refreshTokens RefreshToken[]
 
@@ -62,11 +65,11 @@ model RefreshToken {
 }
 
 model Plan {
-  id          String  @id   // free | starter | professional | enterprise | plano_2d | plano_3d
+  id          String  @id   // free | starter | professional | enterprise | plano_2d | plano_3d | inquilino_vip
   nombre      String
   precio      Int     @default(0)
   propsMax    Int?            // null = ilimitado
-  categoria   String  @default("suscripcion") // suscripcion | plano (oferta visual, no cambia el plan del usuario)
+  categoria   String  @default("suscripcion") // suscripcion (arrendador) | plano (oferta visual, arrendador) | inquilino (Pass VIP)
   descripcion String?
   features    String  @default("[]")          // JSON array serializado
 
@@ -97,12 +100,17 @@ model Propiedad {
   tourTipo     String?
   mapa2d       Boolean  @default(false)
   destacado    Boolean  @default(false)
+  estado       String   @default("disponible") // disponible | reservada (cierre pedido por un inquilino) | arrendada | vendida
+  cierreTipo   String?                        // arriendo | compra (lo que pidió el inquilino)
+  inquilinoActualId String?                   // inquilino que la reservó / la arrienda / la compró
+  cerradaAt    DateTime?
   ownerId      String
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   deletedAt    DateTime?
 
   owner     Usuario    @relation("OwnerProps", fields: [ownerId], references: [id])
+  inquilinoActual Usuario? @relation("InquilinoActual", fields: [inquilinoActualId], references: [id], onDelete: SetNull)
   visitas   Visitas[]
   mensajes  Mensaje[]
   leads     Lead[]

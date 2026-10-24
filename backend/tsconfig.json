@@ -20,5 +20,10 @@
     "strict": false,
     "noUnusedLocals": false,
     "noUnusedParameters": false
-  }
+  },
+  "exclude": [
+    "node_modules",
+    "dist",
+    "test"
+  ]
 }

@@ -12,7 +12,8 @@
     "db:seed": "ts-node prisma/seed.ts",
     "db:seed:nexus": "ts-node prisma/seed-nexus.ts",
     "db:studio": "prisma studio",
-    "db:reset": "prisma migrate reset --force && npm run db:seed"
+    "db:reset": "prisma migrate reset --force && npm run db:seed",
+    "test": "node --require ts-node/register --test \"test/**/*.spec.ts\""
   },
   "dependencies": {
     "@nestjs/common": "^10.3.0",

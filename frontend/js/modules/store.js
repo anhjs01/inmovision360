@@ -35,6 +35,10 @@ export async function getPropById(id) { const c = [...State.props, ...State.myPr
 export async function addProp(dto) { const r = await PropiedadesApi.create(dto); if (r?.ok) { State.myProps.unshift(r.data); return r.data; } throw new Error(r?.error?.message ?? 'Error'); }
 export async function updateProp(id, dto) { const r = await PropiedadesApi.update(id, dto); if (r?.ok) { const i = State.myProps.findIndex(p => p.id === id); if (i !== -1) State.myProps[i] = r.data; return r.data; } throw new Error(r?.error?.message ?? 'Error'); }
 export async function deleteProp(id) { const r = await PropiedadesApi.remove(id); if (r?.ok) State.myProps = State.myProps.filter(p => p.id !== id); return r?.ok ?? false; }
+// Cierre de arriendo / compra
+export async function getMiHogar() { const r = await PropiedadesApi.miHogar(); return r?.ok ? r.data : []; }
+export async function solicitarCierre(id, tipo) { const p = unwrap(await PropiedadesApi.solicitarCierre(id, tipo)); State.props = State.props.filter(x => x.id !== id); return p; }
+export async function resolverCierre(id, accion) { const p = unwrap(await PropiedadesApi.resolverCierre(id, accion)); const i = State.myProps.findIndex(x => x.id === id); if (i !== -1) State.myProps[i] = { ...State.myProps[i], ...p }; return p; }
 
 // Favoritos
 export async function loadFavs() { const r = await FavoritosApi.findAll(); if (r?.ok) { State.favIds = r.data.map(p => p.id); return r.data; } return []; }
@@ -109,7 +113,7 @@ export async function deleteLead(id) { unwrap(await LeadsApi.remove(id)); State.
 export async function getKPIs() { const r = await EstadisticasApi.kpis(); return r?.data ?? { props_activas: 0, visitas_total: 0, ingresos_mes: 0, mensajes_nuevos: 0, leads_activos: 0 }; }
 
 // Suscripciones / planes
-export async function getPlanes() { const r = await SuscripcionesApi.planes(); return r?.ok ? r.data : []; }
+export async function getPlanes() { const r = await SuscripcionesApi.planes(State.session?.rol); return r?.ok ? r.data : []; }
 export async function getMiPlan() { const r = await SuscripcionesApi.miPlan(); return r?.ok ? r.data : null; }
 export async function suscribirse(planId, metodo) { const d = unwrap(await SuscripcionesApi.suscribirse(planId, metodo)); if (State.session) State.session.plan = d.plan_activado ?? planId; return d; }
 export async function cancelarPlan() { unwrap(await SuscripcionesApi.cancelar()); if (State.session) State.session.plan = 'free'; }

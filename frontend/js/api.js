@@ -39,30 +39,45 @@ export async function apiFetch(
     path.startsWith('/auth/register') ||
     path.startsWith('/auth/google');
 
-  const res = await fetch(
-    `${BASE_URL}${path}`,
-    {
-      method,
+  let res;
+  try {
+    res = await fetch(
+      `${BASE_URL}${path}`,
+      {
+        method,
 
-      headers: {
-        'Content-Type': 'application/json',
+        headers: {
+          'Content-Type': 'application/json',
 
-        ...(token
-          ? {
-              Authorization: `Bearer ${token}`,
-            }
-          : {}),
+          ...(token
+            ? {
+                Authorization: `Bearer ${token}`,
+              }
+            : {}),
+        },
+
+        body: body
+          ? JSON.stringify(body)
+          : null,
+      }
+    );
+  } catch {
+    // Backend apagado, CORS o sin internet: se devuelve un error en vez de lanzar
+    // (antes el catálogo público se quedaba en "Cargando…" para siempre)
+    return {
+      ok: false,
+      error: {
+        code: 'NETWORK_ERROR',
+        message: 'No hay conexión con el servidor. Verifica que el backend esté encendido.',
       },
+    };
+  }
 
-      body: body
-        ? JSON.stringify(body)
-        : null,
-    }
-  );
-
+  // Sin token (visitante anónimo) un 401 es solo "requiere sesión": no se recarga la página
   if (
     res.status === 401 &&
     retry &&
+    token &&
     !isAuthCall
   ) {
     const refreshed = await doRefresh();
@@ -377,6 +392,33 @@ export const PropiedadesApi = {
         orden,
       }
     ),
+
+  // Inquilino: inmuebles que reservó, arrienda o compró
+  miHogar: () =>
+    apiFetch(
+      'GET',
+      '/propiedades/mi-hogar'
+    ),
+
+  // Inquilino: tipo = 'arriendo' | 'compra'
+  solicitarCierre: (id, tipo) =>
+    apiFetch(
+      'POST',
+      `/propiedades/${id}/cierre`,
+      {
+        tipo,
+      }
+    ),
+
+  // Arrendador: accion = 'confirmar' | 'rechazar' | 'liberar'
+  resolverCierre: (id, accion) =>
+    apiFetch(
+      'PATCH',
+      `/propiedades/${id}/cierre`,
+      {
+        accion,
+      }
+    ),
 };
 
 // VISITAS
@@ -655,10 +697,11 @@ export const EstadisticasApi = {
 
 // SUSCRIPCIONES
 export const SuscripcionesApi = {
-  planes: () =>
+  // rol: solo las ofertas de ese rol (el inquilino ve el Pass VIP, no los Planos 2D/3D)
+  planes: (rol) =>
     apiFetch(
       'GET',
-      '/suscripciones/planes'
+      '/suscripciones/planes' + (rol ? '?' + toQuery({ rol }) : '')
     ),
 
   miPlan: () =>

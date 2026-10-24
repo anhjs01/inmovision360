@@ -1,8 +1,10 @@
 import { PrismaClient } from '@prisma/client';
 
 // Catálogo de planes compartido por seed.ts y seed-nexus.ts.
-// categoria 'plano' = oferta visual de Planos 2D/3D: se muestra y "contrata" en el frontend,
-// pero no cambia el plan ni los límites del usuario.
+// categoria 'suscripcion' = planes del arrendador (límite de propiedades).
+// categoria 'plano' = oferta visual de Planos 2D/3D para arrendadores: se muestra y "contrata"
+// en el frontend, pero no cambia el plan ni los límites del usuario.
+// categoria 'inquilino' = Pass VIP del inquilino (prioridad, insignia, alertas y soporte).
 export const PLANES = [
   { id: 'free',         nombre: 'Free',         precio: 0,      propsMax: 5,    categoria: 'suscripcion',
     descripcion: 'Para empezar a publicar',
@@ -22,6 +24,12 @@ export const PLANES = [
   { id: 'plano_3d',     nombre: 'Planos 3D',    precio: 129000, propsMax: null, categoria: 'plano',
     descripcion: 'Modelo 3D amoblado para mostrar cada ambiente',
     features: ['Modelo 3D amoblado', 'Vistas isométricas por ambiente', 'Recorrido renderizado', 'Entrega en 5 días hábiles'] },
+  { id: 'inquilino_vip', nombre: 'Inquilino VIP · Pass Express', precio: 29000, propsMax: null, categoria: 'inquilino',
+    descripcion: 'Encuentra y asegura tu próximo hogar antes que los demás',
+    features: ['Postulación prioritaria: tus solicitudes aparecen primero al arrendador',
+               'Insignia de "Perfil verificado" visible para los arrendadores',
+               'Alertas inmediatas de nuevos inmuebles según tus filtros',
+               'Soporte preferencial para agendar tus citas'] },
 ];
 
 // Idempotente: crea o actualiza cada plan

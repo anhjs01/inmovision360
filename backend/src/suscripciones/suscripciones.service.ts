@@ -7,13 +7,21 @@ function parseJsonArray(value: string): string[] {
   try { const v = JSON.parse(value ?? '[]'); return Array.isArray(v) ? v : []; } catch { return []; }
 }
 
+// Ofertas que ve cada rol: el inquilino no ve planes de publicación ni Planos 2D/3D
+const CATEGORIAS_POR_ROL: Record<string, string[]> = {
+  arrendador: ['suscripcion', 'plano'],
+  inquilino:  ['inquilino'],
+};
+
 @Injectable()
 export class SuscripcionesService {
   constructor(private prisma: PrismaService) {}
 
-  // Incluye los planes de suscripción y las ofertas visuales de planos (categoria = 'plano')
-  async getPlanes() {
-    const planes = await this.prisma.plan.findMany({ orderBy: [{ categoria: 'desc' }, { precio: 'asc' }] });
+  // Incluye los planes de suscripción, las ofertas visuales de planos (categoria = 'plano')
+  // y el Pass VIP del inquilino (categoria = 'inquilino'). Con ?rol= solo los que aplican a ese rol
+  async getPlanes(rol?: string) {
+    const where = CATEGORIAS_POR_ROL[rol] ? { categoria: { in: CATEGORIAS_POR_ROL[rol] } } : {};
+    const planes = await this.prisma.plan.findMany({ where, orderBy: [{ categoria: 'desc' }, { precio: 'asc' }] });
     return planes.map(p => ({ ...p, features: parseJsonArray(p.features) }));
   }
 
@@ -26,12 +34,16 @@ export class SuscripcionesService {
   }
 
   // Modo demo: el plan se activa de inmediato (el webhook de Wompi lo confirmaría en producción)
-  async suscribirse(userId: string, planId: string, metodo: string) {
+  async suscribirse(userId: string, rol: string, planId: string, metodo: string) {
     const plan = await this.prisma.plan.findUnique({ where: { id: planId } });
     if (!plan) throw new ApiException(ErrorCode.PLAN_NOT_FOUND, 'Plan no encontrado', 'plan_id', HttpStatus.NOT_FOUND);
     // Las ofertas de planos 2D/3D son solo visuales: no cambian el plan ni los límites del usuario
-    if (plan.categoria !== 'suscripcion')
+    if (plan.categoria === 'plano')
       throw new ApiException(ErrorCode.VALIDATION_ERROR, 'Este plan no es una suscripción', 'plan_id');
+    // Free es la base de todos; el resto depende del rol (arrendador: suscripciones, inquilino: Pass VIP)
+    const suscribible = rol === 'inquilino' ? 'inquilino' : 'suscripcion';
+    if (plan.id !== 'free' && plan.categoria !== suscribible)
+      throw new ApiException(ErrorCode.FORBIDDEN, 'Este plan no está disponible para tu tipo de cuenta', 'plan_id', HttpStatus.FORBIDDEN);
 
     const ref   = `SUB_${planId}_${Date.now()}`;
     const url   = `https://checkout.wompi.co/p/?public-key=pub_stagtest_&reference=${ref}&currency=COP`;

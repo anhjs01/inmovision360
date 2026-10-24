@@ -1165,3 +1165,83 @@ body[data-view="mensajes"] .wa-float { display: none; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
 }
+
+/* ── Atajos en la tarjeta: agendar cita y WhatsApp directo ─────── */
+.pc-acts { flex-wrap: wrap; }
+.pc-btn-agenda { flex: 1; background: #f0fdf4; color: #0b7a44; border: 1.5px solid #a7f3d0; white-space: nowrap; }
+.pc-btn-agenda:hover { background: #dcfce7; }
+.pc-btn-wa { display: inline-grid; place-items: center; width: 42px; padding: 0; background: #25d366; color: #fff; text-decoration: none; }
+.pc-btn-wa:hover { background: #1ebe5a; }
+.pc-btn-ok { flex: 1; background: var(--ac); color: #fff; }
+.pc-btn-ok:hover { background: #0b7a44; }
+.pc-video-d {
+  position: absolute; top: 54px; right: 10px;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 11px; border-radius: 99px; font-size: 11px; font-weight: 700;
+  background: rgba(220,38,38,.95); color: #fff; box-shadow: 0 4px 14px rgba(220,38,38,.35);
+  transition: transform .15s;
+}
+.pc-video-d.pc-video-low { top: 92px; }
+.pc-video-d span { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: rgba(255,255,255,.25); font-size: 8px; }
+.pc-video-d:hover { transform: translateY(-1px); }
+.pc-estado-d { padding: 4px 10px; border-radius: 99px; font-size: 11px; font-weight: 700; }
+.pc-inq-d { font-size: 12px; color: var(--t2); margin: -6px 0 10px; }
+
+/* ── Ciudad con autocompletado ──────────────────────────────────── */
+.city-input { min-width: 210px; }
+
+/* ── Pass Inquilino VIP ─────────────────────────────────────────── */
+.vip-badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 99px; font-size: 10.5px; font-weight: 700; background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; white-space: nowrap; }
+.fb-vip { border-color: #fcd34d; color: #92400e; background: #fffbeb; }
+.vip-sec { padding: 22px 28px 8px; display: flex; flex-direction: column; gap: 18px; }
+.vip-hero { display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; align-items: center; padding: 26px 28px; border-radius: 20px; color: #fff; background: linear-gradient(135deg, #78350f, #b45309 55%, #f59e0b); box-shadow: var(--shh); }
+.vip-hero h2 { font-size: 24px; font-weight: 800; margin: 8px 0 4px; letter-spacing: -.4px; }
+.vip-hero p { font-size: 14px; opacity: .92; max-width: 460px; }
+.vip-tag { display: inline-block; padding: 4px 11px; border-radius: 99px; font-size: 11px; font-weight: 700; background: rgba(255,255,255,.2); }
+.vip-price { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; font-size: 30px; font-weight: 800; }
+.vip-price small { font-size: 13px; font-weight: 500; opacity: .85; }
+.vip-price .btn-a { background: #fff; color: #92400e; }
+.vip-on { font-size: 13px; font-weight: 700; padding: 8px 14px; border-radius: 12px; background: rgba(255,255,255,.2); }
+.vip-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.vip-feat { display: flex; gap: 12px; align-items: flex-start; padding: 16px; border-radius: 14px; background: #fff; border: 1.5px solid #fde68a; font-size: 13.5px; color: var(--t1); line-height: 1.45; }
+.vip-feat-ico { font-size: 22px; line-height: 1; }
+.vip-estado { display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap; }
+.vip-soporte { display: flex; gap: 10px; padding: 12px 14px; border-radius: 12px; background: #fffbeb; border: 1px solid #fde68a; font-size: 12.5px; color: var(--t2); line-height: 1.5; }
+.vip-soporte a { color: #0b7a44; font-weight: 700; }
+.t-row-vip { box-shadow: inset 3px 0 0 #f59e0b; }
+
+/* ── Cierre de arriendo / compra ────────────────────────────────── */
+.cierre-btn { width: 100%; justify-content: center; border-color: var(--pr); color: var(--pr); font-weight: 700; }
+.cierre-nota { font-size: 12.5px; color: var(--t2); padding: 10px 12px; border-radius: 10px; background: #fefce8; line-height: 1.5; }
+.cierre-nota.cierre-ok { background: #f0fdf4; color: #0b7a44; font-weight: 600; }
+
+/* ── Mi Hogar ───────────────────────────────────────────────────── */
+.hogar-sec { font-size: 17px; font-weight: 800; color: var(--pr); padding: 18px 28px 4px; }
+.hogar-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 18px; padding: 12px 28px 28px; }
+.hogar-card { display: grid; grid-template-columns: 130px 1fr; background: #fff; border: 1.5px solid var(--bo); border-radius: 18px; overflow: hidden; cursor: pointer; transition: .2s; }
+.hogar-card:hover { box-shadow: var(--shh); transform: translateY(-2px); }
+.hogar-img { background: linear-gradient(135deg,#e8edf7,#d0d9ef); min-height: 150px; }
+.hogar-img img { width: 100%; height: 100%; object-fit: cover; }
+.hogar-bd { padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.hogar-bd h3 { font-size: 15.5px; font-weight: 700; color: var(--t1); line-height: 1.3; }
+.hogar-bd .pc-lc { margin-bottom: 0; }
+.hogar-meta { font-size: 12.5px; color: var(--t2); }
+.hogar-acts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.hogar-acts .btn-wa, .hogar-acts .btn-g { padding: 8px 12px; font-size: 12.5px; }
+
+/* ── WhatsApp del arrendador (Configuración) ────────────────────── */
+.wa-cfg { margin: 6px 0 20px; padding: 18px; border-radius: 14px; border: 1.5px solid #bbf7d0; background: #f7fef9; display: flex; flex-direction: column; gap: 12px; }
+.wa-cfg h3 { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 700; color: #0b7a44; }
+.wa-cfg code { font-size: 11.5px; padding: 1px 5px; border-radius: 5px; background: #e7f5ec; }
+.wa-preview { display: flex; flex-direction: column; gap: 6px; padding: 14px; border-radius: 12px; background: #efeae2; }
+.wa-preview-lbl { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--t3); }
+.wa-bubble { align-self: flex-end; max-width: 90%; padding: 9px 12px; border-radius: 10px 10px 2px 10px; background: #d9fdd3; color: #111b21; font-size: 13.5px; line-height: 1.45; white-space: pre-wrap; box-shadow: 0 1px 1px rgba(0,0,0,.08); }
+.btn-wa.is-disabled { opacity: .55; }
+
+@media (max-width: 640px) {
+  .hogar-grid { grid-template-columns: 1fr; padding: 12px 16px 24px; }
+  .hogar-card { grid-template-columns: 100px 1fr; }
+  .vip-sec { padding: 16px; }
+  .vip-price { align-items: flex-start; }
+  .city-input { min-width: 0; width: 100%; }
+}

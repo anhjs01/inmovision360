@@ -1,0 +1,9 @@
+{
+  "name": "inmovision-frontend",
+  "private": true,
+  "type": "module",
+  "description": "Frontend estático (ES Modules). Solo se usa para las pruebas: npm test",
+  "scripts": {
+    "test": "node --test \"tests/**/*.test.js\""
+  }
+}

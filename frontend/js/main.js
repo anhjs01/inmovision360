@@ -14,11 +14,12 @@ import { openSoftGate, openDetail, openWompi, openPropertyForm,
          openSolicitarVisita, cancelarVisita, openLeadForm, confirmDeleteLead,
          openPagoForm, confirmDeletePago, openPlanCheckout, confirmCancelPlan,
          pagarPago, openTourViewer, openPlanoCheckout, WA_ICON,
-         openReportarPago, openComprobante, adjuntarComprobante } from './modules/modals.js';
+         openReportarPago, openComprobante, adjuntarComprobante,
+         openVideoViewer, openCierre, openResolverCierre } from './modules/modals.js';
 import { State, toggleFav, isFav, getAllProps,
          markPagoAsPaid, loadMe, loadFavs } from './modules/store.js';
-import { getEl, sanitize, formatCOP, formatNum, CITY_LABELS, AMENITY_LABELS,
-         waLink, WHATSAPP_SOPORTE } from './utils.js';
+import { getEl, sanitize, formatCOP, formatNum, AMENITY_LABELS, cityKey, cityLabel,
+         citiesDatalistHtml, videoEmbedUrl, waLink, WHATSAPP_SOPORTE } from './utils.js';
 import { mediaUrl } from './api.js';
 
 // ── Puentes globales (window.__fn) ────────────────────────────
@@ -48,6 +49,9 @@ window.__reportarPago    = openReportarPago;
 window.__verComprobante  = openComprobante;
 window.__adjuntarComprobante = adjuntarComprobante;
 window.__openTour        = openTourViewer;
+window.__openVideo       = openVideoViewer;
+window.__cerrarTrato     = openCierre;
+window.__resolverCierre  = openResolverCierre;
 window.__toast           = showToast;
 window.__logout          = handleLogout;
 window.__saveConfig      = saveConfig;
@@ -118,7 +122,8 @@ function renderPublicCard(p) {
         ${p.tourVirtual?`<span class="pc-badge-tour">🥽 ${sanitize(p.tourTipo??'Tour')}</span>`:''}
         ${p.destacado?'<span class="pc-badge-feat">⭐ Destacado</span>':''}
         <span class="pc-badge-tipo">${sanitize(p.tipo)}</span>
-        <button class="pc-fav" onclick="event.stopPropagation();window.__toggleFavLanding('${p.id}',this)">${isFav(p.id)?'❤️':'🤍'}</button>
+        ${videoEmbedUrl(p.video)?`<button class="pc-badge-video" title="Ver video" onclick="event.stopPropagation();window.__openVideo('${p.id}')">🎬 Video</button>`:''}
+        <button class="pc-fav" aria-label="Guardar en favoritos" onclick="event.stopPropagation();window.__toggleFavLanding('${p.id}',this)">${isFav(p.id)?'❤️':'🤍'}</button>
       </div>
       <div class="pc-body" onclick="window.__openPubDetail('${p.id}')">
         <div class="pc-meta">
@@ -126,7 +131,7 @@ function renderPublicCard(p) {
           <span class="pc-barrio">${sanitize(p.barrio??'')}</span>
         </div>
         <div class="pc-title">${sanitize(p.titulo)}</div>
-        <div class="pc-loc">📍 ${sanitize(CITY_LABELS[p.ciudad]??p.ciudad)}</div>
+        <div class="pc-loc">📍 ${sanitize(cityLabel(p.ciudad))}</div>
         <div class="pc-specs">
           <span>🛏️ <strong>${p.habitaciones}</strong></span>
           <span>🚿 <strong>${p.banos}</strong></span>
@@ -141,6 +146,10 @@ function renderPublicCard(p) {
       <div class="pc-price-row">
         <div><span class="pc-price">${formatCOP(p.precio)}</span><span class="pc-price-u"> ${p.listing === 'sale' ? 'COP' : 'COP/mes'}</span></div>
         <button class="btn-ver" onclick="window.__openPubDetail('${p.id}')">Ver detalles</button>
+      </div>
+      <div class="pc-quick">
+        <button class="pc-quick-btn" onclick="window.__pubAccion('${p.id}','agendar')">📅 Agendar cita</button>
+        <button class="pc-quick-btn pc-quick-wa" onclick="window.__pubAccion('${p.id}','whatsapp')">${WA_ICON} WhatsApp</button>
       </div>
     </div>`;
 }
@@ -160,12 +169,15 @@ async function renderPublicCatalog() {
   if (pubSort !== 'default') params.sort       = pubSort;
 
   const seq = ++pubSeq;
-  const { data: props, meta, error } = await getAllProps(params);
+  let result;
+  try { result = await getAllProps(params); }
+  catch (e) { result = { data: [], meta: {}, error: 'No hay conexión con el servidor' }; }
+  const { data: props, meta, error } = result;
   if (seq !== pubSeq) return;   // llegó una búsqueda más reciente
   Object.keys(cardSlide).forEach(k => delete cardSlide[k]);
   if (error) {
     if (countEl) countEl.textContent = '';
-    grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:60px;color:var(--t3)"><div style="font-size:48px;margin-bottom:12px">⚠️</div><h3 style="font-size:20px;font-weight:700;color:var(--t1);margin-bottom:8px">No se pudieron cargar las propiedades</h3><p>${sanitize(error)}</p></div>`;
+    grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:60px;color:var(--t3)"><div style="font-size:48px;margin-bottom:12px">⚠️</div><h3 style="font-size:20px;font-weight:700;color:var(--t1);margin-bottom:8px">No se pudieron cargar las propiedades</h3><p>${sanitize(error)}</p><button class="btn-ver" style="margin-top:16px" onclick="window.__renderPub()">Reintentar</button></div>`;
     return;
   }
 
@@ -197,7 +209,9 @@ function _updateSliderUI(propId, sk, total) {
   if (ctr) ctr.textContent = `📷 ${cardSlide[sk]+1}/${total}`;
 }
 
+// Visitante anónimo: guardar favoritos requiere cuenta (antes la petición fallaba con 401)
 window.__toggleFavLanding = async (propId, btn) => {
+  if (!State.session) return openSoftGate(propId, 'favorito');
   const added = await toggleFav(propId);
   btn.textContent = added ? '❤️' : '🤍';
   showToast(added ? 'Guardado ❤️' : 'Eliminado de favoritos','info');
@@ -208,12 +222,23 @@ window.__openPubDetail = (propId) => {
   else openSoftGate(propId);
 };
 
+// Atajos de la tarjeta pública: sin sesión piden crear cuenta indicando la acción
+window.__pubAccion = (propId, accion) => {
+  if (!State.session) return openSoftGate(propId, accion);
+  if (accion === 'agendar') return openSolicitarVisita(propId);
+  openDetail(propId);
+};
+
+window.__renderPub = () => renderPublicCatalog();
+
+let heroTimer = null;
 window.__heroSearch = () => {
-  pubFilter.q      = getEl('hero-q')?.value ?? '';
-  pubFilter.ciudad = getEl('hero-city')?.value ?? '';
+  pubFilter.q      = getEl('hero-q')?.value.trim() ?? '';
+  pubFilter.ciudad = cityKey(getEl('hero-city')?.value);   // lista o cualquier ciudad escrita
   const t          = getEl('hero-tipo')?.value;
   if (t) pubFilter.tipo = t;
-  renderPublicCatalog();
+  clearTimeout(heroTimer);
+  heroTimer = setTimeout(renderPublicCatalog, 300);   // evita una petición por tecla
 };
 
 window.__toggleTour = (btn) => {
@@ -238,10 +263,15 @@ document.addEventListener('change', e => {
 });
 
 document.addEventListener('DOMContentLoaded', async () => {
+  // Autocompletado de ciudades del buscador de la landing
+  const heroCity = getEl('hero-city');
+  if (heroCity && !getEl('hero-ciudades')) heroCity.insertAdjacentHTML('afterend', citiesDatalistHtml('hero-ciudades'));
+
   // Restaurar sesión si hay token guardado
   const token = localStorage.getItem('access_token');
   if (token) {
-    const user = await loadMe();
+    // Si /auth/me falla (token vencido, backend caído) se sigue como visitante: el catálogo igual carga
+    const user = await loadMe().catch(() => null);
     if (user) {
       try {
         if (user.perfilCompleto === false) {
@@ -290,7 +320,8 @@ document.dispatchEvent(new Event('app:modules:ready'));
  '__selectMsg','__showView','__switchTab','__togglePass','__checkStr',
  '__doLogin','__doRegister','__quickLogin','__scrollTo','__heroSearch',
  '__toggleTour','__toggleFavBtn','__toggleFavLanding','__openPubDetail',
- '__slideCard','__goSlide','__navFoto','__setFoto','__wompiPay'
+ '__slideCard','__goSlide','__navFoto','__setFoto','__wompiPay',
+ '__openVideo','__pubAccion','__renderPub'
 ].forEach(function(fn) {
   if (window[fn]) window[fn]._loaded = true;
 });

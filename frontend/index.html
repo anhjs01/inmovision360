@@ -50,7 +50,8 @@
       '__selectMsg','__showView','__switchTab','__togglePass','__checkStr',
       '__doLogin','__doRegister','__quickLogin','__scrollTo','__heroSearch',
       '__toggleTour','__toggleFavBtn','__toggleFavLanding','__openPubDetail',
-      '__slideCard','__goSlide','__navFoto','__setFoto','__wompiPay'];
+      '__slideCard','__goSlide','__navFoto','__setFoto','__wompiPay',
+      '__openVideo','__pubAccion','__renderPub'];
 
     _fns.forEach(function(fn) {
       window[fn] = function() {
@@ -185,15 +186,11 @@
                placeholder="Ciudad, barrio o tipo…"
                oninput="window.__heroSearch()"/>
       </div>
-      <div class="sw-item" style="max-width:160px">
-        <span class="sw-label">Ciudad</span>
-        <select class="sw-select" id="hero-city" onchange="window.__heroSearch()">
-          <option value="">Todas</option>
-          <option value="bogotá">Bogotá</option>
-          <option value="medellín">Medellín</option>
-          <option value="cali">Cali</option>
-          <option value="cartagena">Cartagena</option>
-        </select>
+      <div class="sw-item" style="max-width:200px">
+        <label class="sw-label" for="hero-city">Ciudad</label>
+        <!-- Autocompleta con ciudades de LATAM (datalist lo agrega main.js); se puede escribir cualquiera -->
+        <input class="sw-input" id="hero-city" list="hero-ciudades" autocomplete="off" maxlength="60"
+               placeholder="Bogotá, Lima, CDMX…" oninput="window.__heroSearch()"/>
       </div>
       <div class="sw-item" style="max-width:160px">
         <span class="sw-label">Tipo</span>
@@ -242,11 +239,11 @@
         <p id="pub-count">Cargando propiedades…</p>
       </div>
       <div style="display:flex;gap:10px;align-items:center">
-        <select class="srt-sel" id="pub-sort" onchange="window.__renderPub && window.__renderPub()">
+        <select class="srt-sel" id="pub-sort" aria-label="Ordenar propiedades">
           <option value="default">Destacados primero</option>
-          <option value="price-asc">Precio ↑</option>
-          <option value="price-desc">Precio ↓</option>
-          <option value="area-desc">Mayor área</option>
+          <option value="precio_asc">Precio ↑</option>
+          <option value="precio_desc">Precio ↓</option>
+          <option value="area_desc">Mayor área</option>
         </select>
         <span class="sec-link" onclick="window.__openAuth('l')">Ver todas →</span>
       </div>
