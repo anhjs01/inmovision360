@@ -13,13 +13,16 @@ import { RegisterDto, LoginDto, RefreshDto, ForgotPasswordDto,
 
 @Injectable()
 export class AuthService {
-  private googleClient = new OAuth2Client(this.config.get('GOOGLE_CLIENT_ID'));
+  private googleClient: OAuth2Client;
 
   constructor(
     private prisma:  PrismaService,
     private jwt:     JwtService,
     private config:  ConfigService,
-  ) {}
+  ) {
+    // Inicializar después de que Nest inyecte ConfigService.
+    this.googleClient = new OAuth2Client(this.config.get<string>('GOOGLE_CLIENT_ID'));
+  }
 
   // ── Registro ───────────────────────────────────────────────
   async register(dto: RegisterDto) {
