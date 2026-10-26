@@ -5,7 +5,13 @@
 
 'use strict';
 
-const BASE_URL = 'http://localhost:3000/v1';
+// En producción, define window.INMOVISION_API_URL antes de cargar main.js,
+// por ejemplo: https://tu-api.onrender.com/v1. En desarrollo conserva localhost.
+const isLocalHost = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+const configuredApiUrl = window.INMOVISION_API_URL;
+const BASE_URL = String(
+  configuredApiUrl || (isLocalHost ? 'http://localhost:3000/v1' : '/v1')
+).replace(/\\/+$/, '');
 
 // ── Token helpers ─────────────────────────────────────────────
 export function getToken() {
