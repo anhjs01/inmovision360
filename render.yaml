@@ -1,0 +1,17 @@
+# Render Blueprint: un solo servicio para frontend y API.
+# Tras conectar este repositorio en Render, el servicio se construye automáticamente
+# en cada push a la rama configurada en el panel de Render.
+services:
+  - type: web
+    name: inmovision360
+    runtime: node
+    rootDir: backend
+    buildCommand: npm ci && npx prisma generate && npm run build
+    startCommand: npx prisma db push && npm run start:prod
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        value: file:./inmovision.db
+      - key: JWT_SECRET
+        generateValue: true
