@@ -147,10 +147,11 @@ export async function handleGoogleCredential(response) {
 }
 
 export async function handleCompleteProfile(nombre, apellido, telefono, rol) {
-  if (!nombre || !telefono || !rol) { showToast('Completa nombre, teléfono y rol', 'error'); return; }
+  if (!nombre || !telefono || !['arrendador', 'inquilino'].includes(rol)) { showToast('Completa nombre, teléfono y rol', 'error'); return false; }
   const user = await completeProfile({ nombre, apellido, telefono, rol });
-  if (!user) { showToast('No se pudo guardar tu perfil', 'error'); return; }
+  if (!user) { showToast('No se pudo guardar tu perfil', 'error'); return false; }
   launchApp(user);
+  return true;
 }
 
 export function initGoogleButtons() {
