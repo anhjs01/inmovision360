@@ -11,7 +11,7 @@ const isLocalHost = ['localhost', '127.0.0.1'].includes(window.location.hostname
 const configuredApiUrl = window.INMOVISION_API_URL;
 const BASE_URL = String(
   configuredApiUrl || (isLocalHost ? 'http://localhost:3000/v1' : '/v1')
-).replace(/\\/+$/, '');
+).replace(/\/+$/, '');
 
 // ── Token helpers ─────────────────────────────────────────────
 export function getToken() {
