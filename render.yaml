@@ -1,0 +1,17 @@
+# Render Blueprint para la demo universitaria.
+# Un único servicio publica el frontend y la API desde el mismo dominio.
+# Render mantiene disponible todo el repositorio; los comandos entran a backend.
+services:
+  - type: web
+    name: inmovision360
+    plan: free
+    runtime: node
+    buildCommand: cd backend && npm ci --include=dev && npx prisma generate && npm run build
+    startCommand: cd backend && npx prisma db push && npm run start:prod
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        value: file:./inmovision.db
+      - key: JWT_SECRET
+        generateValue: true
