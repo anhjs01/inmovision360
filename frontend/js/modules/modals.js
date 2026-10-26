@@ -624,4 +624,64 @@ export async function openPagoForm() {
   };
 }
 
+
+// ── Completar perfil de cuenta creada con Google ───────────────
+export function openCompleteProfileModal(user = {}) {
+  const ov = createOverlay();
+  ov.style.zIndex = '1000';
+  ov.innerHTML = `
+    <div class="modal-box" style="max-width:460px;width:calc(100% - 28px);padding:28px">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
+        <div style="width:44px;height:44px;display:grid;place-items:center;border-radius:14px;background:#eff6ff;font-size:23px">👤</div>
+        <div>
+          <h2 style="font-size:21px;font-weight:800;color:var(--t1);margin:0">Completa tu perfil</h2>
+          <p style="font-size:13px;color:var(--t2);margin:4px 0 0">Solo falta un poco para comenzar.</p>
+        </div>
+      </div>
+      <p style="font-size:13px;color:var(--t2);margin:14px 0 18px;line-height:1.5">Confirma tus datos y elige cómo usarás InmoVision360.</p>
+      <form id="google-profile-form" style="display:flex;flex-direction:column;gap:13px">
+        <div class="mf"><label for="gpf-nombre">Nombre *</label><input id="gpf-nombre" name="nombre" required maxlength="80" value="${sanitize(user.nombre ?? '')}" placeholder="Tu nombre"/></div>
+        <div class="mf"><label for="gpf-apellido">Apellido</label><input id="gpf-apellido" name="apellido" maxlength="100" value="${sanitize(user.apellido ?? '')}" placeholder="Tu apellido"/></div>
+        <div class="mf"><label for="gpf-telefono">Teléfono *</label><input id="gpf-telefono" name="telefono" type="tel" required maxlength="30" autocomplete="tel" placeholder="+57 300 000 0000"/></div>
+        <div class="mf"><label for="gpf-rol">¿Cómo usarás la plataforma? *</label><select id="gpf-rol" name="rol" required><option value="inquilino" ${user.rol === 'inquilino' ? 'selected' : ''}>Busco una propiedad (inquilino)</option><option value="arrendador" ${user.rol === 'arrendador' ? 'selected' : ''}>Quiero publicar propiedades (arrendador)</option></select></div>
+        <p id="gpf-error" role="alert" style="display:none;color:#b91c1c;font-size:12px;margin:0"></p>
+        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:5px">
+          <button type="submit" id="gpf-submit" class="btn-a" style="width:100%">Guardar y continuar</button>
+        </div>
+      </form>
+    </div>`;
+  const form = ov.querySelector('#google-profile-form');
+  const submit = ov.querySelector('#gpf-submit');
+  const error = ov.querySelector('#gpf-error');
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const nombre = ov.querySelector('#gpf-nombre').value.trim();
+    const apellido = ov.querySelector('#gpf-apellido').value.trim();
+    const telefono = ov.querySelector('#gpf-telefono').value.trim();
+    const rol = ov.querySelector('#gpf-rol').value;
+    if (!nombre || !telefono || !['arrendador', 'inquilino'].includes(rol)) {
+      error.textContent = 'Completa nombre, teléfono y rol.';
+      error.style.display = 'block';
+      return;
+    }
+    submit.disabled = true;
+    submit.textContent = 'Guardando…';
+    error.style.display = 'none';
+    try {
+      const { handleCompleteProfile } = await import('./auth.js');
+      const saved = await handleCompleteProfile(nombre, apellido, telefono, rol);
+      if (saved) ov.remove();
+      else {
+        submit.disabled = false;
+        submit.textContent = 'Guardar y continuar';
+      }
+    } catch (e) {
+      error.textContent = e?.message || 'No se pudo guardar el perfil. Inténtalo de nuevo.';
+      error.style.display = 'block';
+      submit.disabled = false;
+      submit.textContent = 'Guardar y continuar';
+    }
+  });
+}
+
 export { markPagoAsPaid };
